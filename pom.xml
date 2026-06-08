@@ -89,6 +89,25 @@
             </dependencies>
         </profile>
         <profile>
+            <id>regatta</id>
+            <activation>
+                <property>
+                    <name>env.BENCHBASE_PROFILE</name>
+                    <value>regatta</value>
+                </property>
+            </activation>
+            <properties>
+                <classifier>regatta</classifier>
+            </properties>
+            <dependencies>
+                <dependency>
+                    <groupId>dev.regatta</groupId>
+                    <artifactId>regatta-jdbc</artifactId>
+                    <version>26.0.2</version>
+                </dependency>
+            </dependencies>
+        </profile>
+        <profile>
             <id>mysql</id>
             <activation>
                 <property>
@@ -532,6 +551,7 @@
                                 <ignoredUnusedDeclaredDependency>org.apache.phoenix:phoenix-client-hbase-2.4:jar</ignoredUnusedDeclaredDependency>
                                 <ignoredUnusedDeclaredDependency>com.microsoft.sqlserver:mssql-jdbc:jar</ignoredUnusedDeclaredDependency>
                                 <ignoredUnusedDeclaredDependency>org.xerial:sqlite-jdbc:jar</ignoredUnusedDeclaredDependency>
+                                <ignoredUnusedDeclaredDependency>dev.regatta:regatta-jdbc:jar</ignoredUnusedDeclaredDependency>
                             </ignoredUnusedDeclaredDependencies>
                         </configuration>
                     </execution>

@@ -1,0 +1,96 @@
+<?xml version="1.0"?>
+<dialects>
+    <dialect type="REGATTA">
+        <procedure name="Q4">
+            <statement name="query_stmt">
+                SELECT o_ol_cnt, count(*) AS order_count
+                FROM oorder
+                JOIN order_line ON o_id = ol_o_id
+                AND o_w_id = ol_w_id
+                AND o_d_id = ol_d_id
+                AND ol_delivery_d >= o_entry_d
+                GROUP BY o_ol_cnt
+                ORDER BY o_ol_cnt;
+            </statement>
+        </procedure>
+        <procedure name="Q15">
+            <!-- Dummy statement to avoid view creation -->
+            <statement name="createview_stmt">
+                UPDATE supplier
+                SET su_suppkey = su_suppkey
+                WHERE 1 = 0
+            </statement>
+            <statement name="query_stmt">
+                SELECT su_suppkey, su_name, su_address, su_phone, total_revenue
+                FROM supplier,
+                    (SELECT mod((s_w_id * s_i_id), 10000) AS supplier_no,
+                            sum(ol_amount)                 AS total_revenue
+                    FROM order_line, stock
+                    WHERE ol_i_id = s_i_id
+                        AND ol_supply_w_id = s_w_id
+                        AND ol_delivery_d >= '2007-01-02 00:00:00.000000'
+                    GROUP BY supplier_no) revenue0
+                WHERE su_suppkey = supplier_no
+                AND total_revenue = (SELECT max(total_revenue)
+                                    FROM (SELECT mod((s_w_id * s_i_id), 10000) AS supplier_no,
+                                                    sum(ol_amount)                 AS total_revenue
+                                            FROM order_line, stock
+                                            WHERE ol_i_id = s_i_id
+                                            AND ol_supply_w_id = s_w_id
+                                            AND ol_delivery_d >= '2007-01-02 00:00:00.000000'
+                                            GROUP BY supplier_no) revenue0_inner)
+                ORDER BY su_suppkey;
+            </statement>
+            <statement name="dropview_stmt">
+                <!-- Dummy statement to avoid view deletion -->
+                UPDATE supplier
+                SET su_suppkey = su_suppkey
+                WHERE 1 = 0
+            </statement>
+        </procedure>
+        <procedure name="Q21">
+            <statement name="query_stmt">
+                SELECT su_name, count(*) AS numwait
+                FROM supplier, order_line l1, oorder, stock, nation
+                WHERE l1.ol_o_id = o_id
+                AND l1.ol_w_id = o_w_id
+                AND l1.ol_d_id = o_d_id
+                AND l1.ol_w_id = s_w_id
+                AND l1.ol_i_id = s_i_id
+                AND mod((s_w_id * s_i_id), 10000) = su_suppkey
+                AND l1.ol_delivery_d > o_entry_d
+                AND l1.ol_number NOT IN
+                    (SELECT l2.ol_number
+                    FROM order_line l2
+                    JOIN order_line l3 ON l2.ol_o_id = l3.ol_o_id
+                    AND l2.ol_w_id = l3.ol_w_id
+                    AND l2.ol_d_id = l3.ol_d_id
+                    AND l3.ol_delivery_d > l2.ol_delivery_d)
+                AND su_nationkey = n_nationkey
+                AND n_name = 'Germany'
+                GROUP BY su_name
+                ORDER BY numwait DESC, su_name;
+            </statement>
+        </procedure>
+        <procedure name="Q22">
+            <statement name="query_stmt">
+                SELECT substring(c_state from 1 for 1) AS country,
+                    count(*)                          AS numcust,
+                    sum(c_balance)                    AS totacctbal
+                FROM customer
+                LEFT JOIN oorder ON o_c_id = c_id
+                AND o_w_id = c_w_id
+                AND o_d_id = c_d_id
+                WHERE substring(c_phone from 1 for 1) IN ('1', '2', '3', '4', '5', '6', '7')
+                AND c_balance > (
+                    SELECT avg(c_balance)
+                    FROM customer
+                    WHERE c_balance > 0.00
+                        AND substring(c_phone from 1 for 1) IN ('1', '2', '3', '4', '5', '6', '7'))
+                AND o_id IS NULL
+                GROUP BY substring(c_state from 1 for 1)
+                ORDER BY substring(c_state from 1 for 1);
+            </statement>
+        </procedure>
+    </dialect>
+</dialects>
