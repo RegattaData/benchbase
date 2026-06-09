@@ -416,6 +416,7 @@ public final class TPCCLoader extends Loader<TPCCBenchmark> {
           custPrepStmt.setString(idx++, customer.c_street_2);
           custPrepStmt.setString(idx++, customer.c_city);
           custPrepStmt.setString(idx++, customer.c_state);
+          // HACK: Regatta does not support ascii() function in CH workload
           if (this.getDatabaseType() == DatabaseType.REGATTA) {
             custPrepStmt.setInt(idx++, customer.c_state.charAt(0));
           }
