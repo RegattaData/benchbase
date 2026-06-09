@@ -4,7 +4,7 @@
     <!-- Connection details -->
     <type>REGATTA</type>
     <driver>dev.regatta.jdbc26.RegDriver</driver>
-    <url>jdbc:regatta:10.10.80.10:8809</url>
+    <url>jdbc:regatta:URL</url>
     <username>admin</username>
     <password>RegattaDefault1234!</password>
     <reconnectOnConnectionFailure>true</reconnectOnConnectionFailure>

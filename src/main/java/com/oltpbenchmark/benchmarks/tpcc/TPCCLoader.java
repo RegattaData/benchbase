@@ -21,6 +21,7 @@ import com.oltpbenchmark.api.Loader;
 import com.oltpbenchmark.api.LoaderThread;
 import com.oltpbenchmark.benchmarks.tpcc.pojo.*;
 import com.oltpbenchmark.catalog.Table;
+import com.oltpbenchmark.types.DatabaseType;
 import com.oltpbenchmark.util.SQLUtil;
 import java.sql.*;
 import java.util.ArrayList;
@@ -415,6 +416,9 @@ public final class TPCCLoader extends Loader<TPCCBenchmark> {
           custPrepStmt.setString(idx++, customer.c_street_2);
           custPrepStmt.setString(idx++, customer.c_city);
           custPrepStmt.setString(idx++, customer.c_state);
+          if (this.getDatabaseType() == DatabaseType.REGATTA) {
+            custPrepStmt.setInt(idx++, customer.c_state.charAt(0));
+          }
           custPrepStmt.setString(idx++, customer.c_zip);
           custPrepStmt.setString(idx++, customer.c_phone);
           custPrepStmt.setTimestamp(idx++, customer.c_since);

@@ -2,10 +2,10 @@
 -- Changes from the original PostgreSQL DDL:
 --   1. decimal(p,s)   → NUMERIC(p,s)            (Regatta type name)
 --   2. float          → DOUBLE PRECISION         (c_ytd_payment)
---   3. Composite PKs  → single-column PKs        (Regatta limitation)
+--   3. Composite PKs  → removed, enforce uniqueness at application layer (Regatta limitation)
 --   4. FOREIGN KEY … REFERENCES … ON DELETE CASCADE  → removed (unsupported)
---   5. Table-level UNIQUE(…)    → column-level UNIQUE INDEX
---   6. PRIMARY KEY syntax       → PRIMARY KEY UNIQUE INDEX (mandatory INDEX keyword)
+--   5. Table-level UNIQUE(…)    → removed, enforce uniqueness at application layer (Regatta limitation)
+--   6. PRIMARY KEY syntax       → removed, enforce uniqueness at application layer (Regatta limitation)
 --   7. Standalone CREATE INDEX  → inline INDEX on column declaration
 --   8. Multi-column index on customer(name) → single-column index on c_last only
 --      (Regatta indexes are single-column)
@@ -14,7 +14,7 @@
 
 -- ─── warehouse ──────────────────────────────────────────────────────────────
 CREATE TABLE warehouse (
-    w_id       INT              NOT NULL PRIMARY KEY UNIQUE INDEX,
+    w_id       INT              NOT NULL,
     w_ytd      NUMERIC(12, 2)   NOT NULL,
     w_tax      NUMERIC(4, 4)    NOT NULL,
     w_name     VARCHAR(10)      NOT NULL,
@@ -27,7 +27,7 @@ CREATE TABLE warehouse (
 
 -- ─── item ────────────────────────────────────────────────────────────────────
 CREATE TABLE item (
-    i_id    INT            NOT NULL PRIMARY KEY UNIQUE INDEX,
+    i_id    INT            NOT NULL,
     i_name  VARCHAR(24)    NOT NULL,
     i_price NUMERIC(5, 2)  NOT NULL,
     i_data  VARCHAR(50)    NOT NULL,
@@ -39,7 +39,7 @@ CREATE TABLE item (
 -- s_i_id chosen as PK; s_w_id uniqueness enforced by application.
 CREATE TABLE stock (
     s_w_id       INT            NOT NULL,
-    s_i_id       INT            NOT NULL PRIMARY KEY UNIQUE INDEX,
+    s_i_id       INT            NOT NULL,
     s_quantity   INT            NOT NULL,
     s_ytd        NUMERIC(8, 2)  NOT NULL,
     s_order_cnt  INT            NOT NULL,
@@ -63,7 +63,7 @@ CREATE TABLE stock (
 -- Original PK was (d_w_id, d_id); Regatta requires single-column PK.
 CREATE TABLE district (
     d_w_id      INT             NOT NULL,
-    d_id        INT             NOT NULL PRIMARY KEY UNIQUE INDEX,
+    d_id        INT             NOT NULL,
     d_ytd       NUMERIC(12, 2)  NOT NULL,
     d_tax       NUMERIC(4, 4)   NOT NULL,
     d_next_o_id INT             NOT NULL,
@@ -83,10 +83,10 @@ CREATE TABLE district (
 CREATE TABLE customer (
     c_w_id         INT             NOT NULL,
     c_d_id         INT             NOT NULL,
-    c_id           INT             NOT NULL PRIMARY KEY UNIQUE INDEX,
+    c_id           INT             NOT NULL,
     c_discount     NUMERIC(4, 4)   NOT NULL,
     c_credit       CHAR(2)         NOT NULL,
-    c_last         VARCHAR(16)     NOT NULL INDEX,   -- replaces idx_customer_name
+    c_last         VARCHAR(16)     NOT NULL,   -- replaces idx_customer_name
     c_first        VARCHAR(16)     NOT NULL,
     c_credit_lim   NUMERIC(12, 2)  NOT NULL,
     c_balance      NUMERIC(12, 2)  NOT NULL,
@@ -97,6 +97,7 @@ CREATE TABLE customer (
     c_street_2     VARCHAR(20)     NOT NULL,
     c_city         VARCHAR(20)     NOT NULL,
     c_state        CHAR(2)         NOT NULL,
+    c_state_key    INT             NOT NULL,
     c_zip          CHAR(9)         NOT NULL,
     c_phone        CHAR(16)        NOT NULL,
     c_since        TIMESTAMP       NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -126,7 +127,7 @@ CREATE TABLE history (
 CREATE TABLE oorder (
     o_w_id       INT       NOT NULL,
     o_d_id       INT       NOT NULL,
-    o_id         INT       NOT NULL PRIMARY KEY UNIQUE INDEX,
+    o_id         INT       NOT NULL,
     o_c_id       INT       NOT NULL,
     o_carrier_id INT                DEFAULT NULL,
     o_ol_cnt     INT       NOT NULL,
@@ -141,7 +142,7 @@ CREATE TABLE oorder (
 CREATE TABLE new_order (
     no_w_id INT NOT NULL,
     no_d_id INT NOT NULL,
-    no_o_id INT NOT NULL PRIMARY KEY UNIQUE INDEX
+    no_o_id INT NOT NULL
     -- FK (no_w_id, no_d_id, no_o_id) → oorder : removed, enforce at app layer
 );
 
@@ -151,7 +152,7 @@ CREATE TABLE order_line (
     ol_w_id        INT            NOT NULL,
     ol_d_id        INT            NOT NULL,
     ol_o_id        INT            NOT NULL,
-    ol_number      INT            NOT NULL PRIMARY KEY UNIQUE INDEX,
+    ol_number      INT            NOT NULL,
     ol_i_id        INT            NOT NULL,
     ol_delivery_d  TIMESTAMP               DEFAULT NULL,
     ol_amount      NUMERIC(6, 2)  NOT NULL,
