@@ -1,18 +1,4 @@
--- TPC-C schema adapted for Regatta SQL
--- Changes from the original PostgreSQL DDL:
---   1. decimal(p,s)   → NUMERIC(p,s)            (Regatta type name)
---   2. float          → DOUBLE PRECISION         (c_ytd_payment)
---   3. Composite PKs  → removed, enforce uniqueness at application layer (Regatta limitation)
---   4. FOREIGN KEY … REFERENCES … ON DELETE CASCADE  → removed (unsupported)
---   5. Table-level UNIQUE(…)    → removed, enforce uniqueness at application layer (Regatta limitation)
---   6. PRIMARY KEY syntax       → removed, enforce uniqueness at application layer (Regatta limitation)
---   7. Standalone CREATE INDEX  → inline INDEX on column declaration
---   8. Multi-column index on customer(name) → single-column index on c_last only
---      (Regatta indexes are single-column)
---
--- Note: FK / cascade referential integrity must be enforced at the application layer.
-
--- ─── warehouse ──────────────────────────────────────────────────────────────
+-- Tables are dropped (if needed) in BenchmarkModule.java before loading the DDL.
 CREATE TABLE warehouse (
     w_id       INT              NOT NULL,
     w_ytd      NUMERIC(12, 2)   NOT NULL,
@@ -25,7 +11,6 @@ CREATE TABLE warehouse (
     w_zip      CHAR(9)          NOT NULL
 );
 
--- ─── item ────────────────────────────────────────────────────────────────────
 CREATE TABLE item (
     i_id    INT            NOT NULL,
     i_name  VARCHAR(24)    NOT NULL,
@@ -34,9 +19,6 @@ CREATE TABLE item (
     i_im_id INT            NOT NULL
 );
 
--- ─── stock ───────────────────────────────────────────────────────────────────
--- Original PK was (s_w_id, s_i_id); Regatta requires single-column PK.
--- s_i_id chosen as PK; s_w_id uniqueness enforced by application.
 CREATE TABLE stock (
     s_w_id       INT            NOT NULL,
     s_i_id       INT            NOT NULL,
@@ -55,12 +37,8 @@ CREATE TABLE stock (
     s_dist_08    CHAR(24)       NOT NULL,
     s_dist_09    CHAR(24)       NOT NULL,
     s_dist_10    CHAR(24)       NOT NULL
-    -- FK (s_w_id) → warehouse(w_id) : removed, enforce at app layer
-    -- FK (s_i_id) → item(i_id)      : removed, enforce at app layer
 );
 
--- ─── district ────────────────────────────────────────────────────────────────
--- Original PK was (d_w_id, d_id); Regatta requires single-column PK.
 CREATE TABLE district (
     d_w_id      INT             NOT NULL,
     d_id        INT             NOT NULL,
@@ -73,24 +51,19 @@ CREATE TABLE district (
     d_city      VARCHAR(20)     NOT NULL,
     d_state     CHAR(2)         NOT NULL,
     d_zip       CHAR(9)         NOT NULL
-    -- FK (d_w_id) → warehouse(w_id) : removed, enforce at app layer
 );
 
--- ─── customer ────────────────────────────────────────────────────────────────
--- Original PK was (c_w_id, c_d_id, c_id); Regatta requires single-column PK.
--- float → DOUBLE PRECISION on c_ytd_payment.
--- Inline index on c_last replaces the original multi-column idx_customer_name.
 CREATE TABLE customer (
     c_w_id         INT             NOT NULL,
     c_d_id         INT             NOT NULL,
     c_id           INT             NOT NULL,
     c_discount     NUMERIC(4, 4)   NOT NULL,
     c_credit       CHAR(2)         NOT NULL,
-    c_last         VARCHAR(16)     NOT NULL,   -- replaces idx_customer_name
+    c_last         VARCHAR(16)     NOT NULL,
     c_first        VARCHAR(16)     NOT NULL,
     c_credit_lim   NUMERIC(12, 2)  NOT NULL,
     c_balance      NUMERIC(12, 2)  NOT NULL,
-    c_ytd_payment  DOUBLE PRECISION NOT NULL,        -- was float
+    c_ytd_payment  DOUBLE PRECISION NOT NULL,
     c_payment_cnt  INT             NOT NULL,
     c_delivery_cnt INT             NOT NULL,
     c_street_1     VARCHAR(20)     NOT NULL,
@@ -103,11 +76,8 @@ CREATE TABLE customer (
     c_since        TIMESTAMP       NOT NULL DEFAULT CURRENT_TIMESTAMP,
     c_middle       CHAR(2)         NOT NULL,
     c_data         VARCHAR(500)    NOT NULL
-    -- FK (c_w_id, c_d_id) → district(d_w_id, d_id) : removed, enforce at app layer
 );
 
--- ─── history ─────────────────────────────────────────────────────────────────
--- No PK in original; heap table retained as-is.
 CREATE TABLE history (
     h_c_id   INT             NOT NULL,
     h_c_d_id INT             NOT NULL,
@@ -117,13 +87,8 @@ CREATE TABLE history (
     h_date   TIMESTAMP       NOT NULL DEFAULT CURRENT_TIMESTAMP,
     h_amount NUMERIC(6, 2)   NOT NULL,
     h_data   VARCHAR(24)     NOT NULL
-    -- FK (h_c_w_id, h_c_d_id, h_c_id) → customer : removed, enforce at app layer
-    -- FK (h_w_id, h_d_id) → district  : removed, enforce at app layer
 );
 
--- ─── oorder ──────────────────────────────────────────────────────────────────
--- Original PK was (o_w_id, o_d_id, o_id); also had UNIQUE(o_w_id, o_d_id, o_c_id, o_id).
--- Regatta single-column PK on o_id; composite UNIQUE not supported.
 CREATE TABLE oorder (
     o_w_id       INT       NOT NULL,
     o_d_id       INT       NOT NULL,
@@ -133,21 +98,14 @@ CREATE TABLE oorder (
     o_ol_cnt     INT       NOT NULL,
     o_all_local  INT       NOT NULL,
     o_entry_d    TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
-    -- FK (o_w_id, o_d_id, o_c_id) → customer : removed, enforce at app layer
-    -- UNIQUE(o_w_id, o_d_id, o_c_id, o_id)   : dropped, multi-col UNIQUE unsupported
 );
 
--- ─── new_order ───────────────────────────────────────────────────────────────
--- Original PK was (no_w_id, no_d_id, no_o_id); Regatta single-column PK on no_o_id.
 CREATE TABLE new_order (
     no_w_id INT NOT NULL,
     no_d_id INT NOT NULL,
     no_o_id INT NOT NULL
-    -- FK (no_w_id, no_d_id, no_o_id) → oorder : removed, enforce at app layer
 );
 
--- ─── order_line ──────────────────────────────────────────────────────────────
--- Original PK was (ol_w_id, ol_d_id, ol_o_id, ol_number); single-column on ol_number.
 CREATE TABLE order_line (
     ol_w_id        INT            NOT NULL,
     ol_d_id        INT            NOT NULL,
@@ -159,6 +117,4 @@ CREATE TABLE order_line (
     ol_supply_w_id INT            NOT NULL,
     ol_quantity    NUMERIC(6, 2)  NOT NULL,
     ol_dist_info   CHAR(24)       NOT NULL
-    -- FK (ol_w_id, ol_d_id, ol_o_id) → oorder         : removed
-    -- FK (ol_supply_w_id, ol_i_id)   → stock(s_w_id,s_i_id) : removed
 );

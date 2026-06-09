@@ -4,7 +4,7 @@
     <!-- Connection details -->
     <type>REGATTA</type>
     <driver>dev.regatta.jdbc26.RegDriver</driver>
-    <url>jdbc:regatta:URL</url>
+    <url>jdbc:regatta:127.0.0.1:8850</url>
     <username>admin</username>
     <password>RegattaDefault1234!</password>
     <reconnectOnConnectionFailure>true</reconnectOnConnectionFailure>
@@ -37,7 +37,7 @@
 
             <!-- Need to Specify transaction weights for each workload .. Otherwise the number of fields won't match -->
             <weights bench="tpcc">45,43,4,4,4</weights>
-                <weights bench="chbenchmark">3, 2, 3, 2, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5</weights>
+            <weights bench="chbenchmark">3, 2, 3, 2, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5</weights>
         </work>
 
         <!-- Extra features showcase -->
@@ -53,7 +53,7 @@
 
             <!-- Specifies transaction weight for each workload. -->
             <!-- <weights bench="tpcc">45,43,4,4,4</weights> -->
-            <!-- <weights bench="chbenchmark">3, 2, 3, 2, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5</weights> -->
+            <!-- <weights bench="chbenchmark">3, 2, 3, 2, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5</weights> -->
         <!-- </work> -->
 
         <!--
@@ -64,7 +64,7 @@
             <rate bench="chbenchmark">unlimited</rate>
 
             <weights bench="tpcc">45,43,4,4,4</weights>
-            <weights bench="chbenchmark">3, 2, 3, 2, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5</weights>
+            <weights bench="chbenchmark">3, 2, 3, 2, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5</weights>
         </work>
         -->
     </works>
@@ -84,24 +84,24 @@
         <transactiontype>
             <name>Q4</name>
         </transactiontype>
-        <!-- <transactiontype>
+        <transactiontype>
             <name>Q5</name>
-        </transactiontype> -->
+        </transactiontype>
         <transactiontype>
             <name>Q6</name>
         </transactiontype>
-        <!-- <transactiontype>
+        <transactiontype>
             <name>Q7</name>
-        </transactiontype> -->
-        <!-- <transactiontype>
+        </transactiontype>
+        <transactiontype>
             <name>Q8</name>
-        </transactiontype> -->
+        </transactiontype>
         <transactiontype>
             <name>Q9</name>
         </transactiontype>
-        <!-- <transactiontype>
+        <transactiontype>
             <name>Q10</name>
-        </transactiontype> -->
+        </transactiontype>
         <transactiontype>
             <name>Q11</name>
         </transactiontype>
