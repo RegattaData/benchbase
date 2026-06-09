@@ -16,28 +16,33 @@ BenchBase (formerly [OLTPBench](https://github.com/oltpbenchmark/oltpbench/)) is
 
 ---
 
+## Requirements
+The Regatta JDBC driver must be installed before running workloads on the Regatta DB.
+For installation guidelines please refer to https://docs.regatta.dev/drivers-and-clients/java/install-your-java-client.
+
 ## Quickstart
 
-To clone and build BenchBase using the `postgres` profile,
+To clone and build BenchBase using the `regatta` profile,
 
 ```bash
-git clone --depth 1 https://github.com/cmu-db/benchbase.git
+git clone --depth 1 https://github.com/RegattaData/benchbase.git
 cd benchbase
-./mvnw clean package -P postgres
+./mvnw clean package -P regatta
 ```
 
 This produces artifacts in the `target` folder, which can be extracted,
 
 ```bash
 cd target
-tar xvzf benchbase-postgres.tgz
-cd benchbase-postgres
+tar xvzf benchbase-regatta.tgz
+cd benchbase-regatta
 ```
 
-Inside this folder, you can run BenchBase. For example, to execute the `tpcc` benchmark,
+Inside this folder, you can run BenchBase. For example, to execute the `ch` benchmark only,
 
 ```bash
-java -jar benchbase.jar -b tpcc -c config/postgres/sample_tpcc_config.xml --create=true --load=true --execute=true
+java -jar benchbase.jar -b tpcc,chbenchmark -c config/regatta/sample_chbenchmark_config.xml --create=true --load=true --execute=false
+java -jar benchbase.jar -b chbenchmark -c config/regatta/sample_chbenchmark_config.xml --create=false --load=false --execute=true
 ```
 
 A full list of options can be displayed,
@@ -86,8 +91,11 @@ benchmark, leveraging all the system features (logging, controlled speed, contro
 
 ## Usage Guide
 
+### How to Configure RegattaDB
+The connection and workload properties should be configured via `config/regatta/sample_tpcc_config.xml` and in `sample_chbenchmark_config.xml`.
+
 ### How to Build
-Run the following command to build the distribution for a given database specified as the profile name (`-P`).  The following profiles are currently supported: `postgres`, `mysql`, `mariadb`, `sqlite`, `cockroachdb`, `phoenix`, and `spanner`.
+Run the following command to build the distribution for a given database specified as the profile name (`-P`).  The following profiles are currently supported: `postgres`, `mysql`, `mariadb`, `sqlite`, `cockroachdb`, `phoenix`, `regatta` and `spanner`.
 
 ```bash
 ./mvnw clean package -P <profile name>
@@ -104,16 +112,6 @@ Once you build and unpack the distribution, you can run `benchbase` just like an
 To bring up help contents:
 ```bash
 java -jar benchbase.jar -h
-```
-
-To execute the `tpcc` benchmark:
-```bash
-java -jar benchbase.jar -b tpcc -c config/postgres/sample_tpcc_config.xml --create=true --load=true --execute=true
-```
-
-For composite benchmarks like `chbenchmark`, which require multiple schemas to be created and loaded, you can provide a comma separated list:
-```bash
-java -jar benchbase.jar -b tpcc,chbenchmark -c config/postgres/sample_chbenchmark_config.xml --create=true --load=true --execute=true
 ```
 
 The following options are provided:
@@ -145,10 +143,11 @@ usage: benchbase
 
 ### How to Run with Maven
 
-Instead of first building, packaging and extracting before running benchbase, it is possible to execute benchmarks directly against the source code using Maven. Once you have the project cloned you can run any benchmark from the root project directory using the Maven `exec:java` goal. For example, the following command executes the `tpcc` benchmark against `postgres`:
+Instead of first building, packaging and extracting before running benchbase, it is possible to execute benchmarks directly against the source code using Maven. Once you have the project cloned you can run any benchmark from the root project directory using the Maven `exec:java` goal. For example, the following command executes the `tpcc` benchmark against `regatta`:
 
 ```
-mvn clean compile exec:java -P postgres -Dexec.args="-b tpcc -c config/postgres/sample_tpcc_config.xml --create=true --load=true --execute=true"
+mvn clean compile exec:java -P regatta -Dexec.args="-b ch -c config/regatta/sample_chbenchmark_config.xml --create=true --load=true --execute=false"
+mvn clean compile exec:java -P regatta -Dexec.args="-b ch -c config/regatta/sample_chbenchmark_config.xml --create=false --load=false --execute=true"
 ```
 
 this is equivalent to the steps above but eliminates the need to first package and then extract the distribution.
@@ -243,7 +242,7 @@ The original OLTPBench code was largely written by the authors of the original p
 
 A significant portion of the modernization was contributed by [Tim Veil @ Cockroach Labs](https://github.com/timveil-cockroach), including but not limited to:
 
-* Built with and for Java ~~17~~ 21.
+* Built with and for Java 23.
 * Migration from Ant to Maven.
   * Reorganized project to fit Maven structure.
   * Removed static `lib` directory and dependencies.

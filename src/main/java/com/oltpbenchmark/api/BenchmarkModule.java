@@ -28,7 +28,9 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.sql.Connection;
 import java.sql.DriverManager;
+import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Statement;
 import java.util.*;
 import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
@@ -238,6 +240,13 @@ public abstract class BenchmarkModule {
    */
   public final void createDatabase(DatabaseType dbType, Connection conn)
       throws SQLException, IOException {
+    
+    /**
+     * Drop existing Regatta tables before creating new ones, if needed.
+     */
+    if (dbType == DatabaseType.REGATTA) {
+      dropExistingRegattaTables(conn);
+    }
 
     ScriptRunner runner = new ScriptRunner(conn, true, true);
 
@@ -250,6 +259,65 @@ public abstract class BenchmarkModule {
       String ddlPath = this.getDatabaseDDLPath(dbType);
       LOG.debug("Executing script [{}] for database type [{}]", ddlPath, dbType);
       runner.runScript(ddlPath);
+    }
+  }
+
+/**
+ * Drops the existing Regatta tables if there are any.
+ * This is needed because Regatta does not support "IF NOT EXISTS" semantics, and
+ * attempting to create a table that already exists would result in an error.
+ * @param conn the Connection handle to the database
+ * @throws SQLException if there is an error executing the SQL statements to drop the tables
+ */
+  private void dropExistingRegattaTables(Connection conn) throws SQLException {
+    Set<String> tablesToDrop = getRegattaTablesForBenchmark();
+    if (tablesToDrop.isEmpty()) {
+      return;
+    }
+
+    List<String> existingTables = new ArrayList<>();
+    try (Statement showTables = conn.createStatement();
+        ResultSet rs = showTables.executeQuery("SHOW TABLES")) {
+      while (rs.next()) {
+        String tableName = rs.getString(1);
+        if (tableName != null && tablesToDrop.contains(tableName.toLowerCase(Locale.ROOT))) {
+          existingTables.add(tableName);
+        }
+      }
+    }
+
+    for (String tableName : existingTables) {
+      try (Statement dropTable = conn.createStatement()) {
+        LOG.debug("Dropping existing Regatta table [{}] before DDL", tableName);
+        dropTable.execute("DROP TABLE " + tableName);
+      }
+    }
+  }
+
+/**
+ * Returns the set of Regatta tables that should be dropped before loading the DDL for this benchmark.
+ * The only supported benchmarks for Regatta are currently TPC-C and CH-benCHmark
+ * @return the set of tables to be dropped for the current benchmark. If the benchmark is not one of
+ * the supported ones, an empty set is returned.
+ */
+  private Set<String> getRegattaTablesForBenchmark() {
+    switch (this.getBenchmarkName()) {
+      case "chbenchmark":
+        return new HashSet<>(Arrays.asList("region", "nation", "supplier"));
+      case "tpcc":
+        return new HashSet<>(
+            Arrays.asList(
+                "warehouse",
+                "item",
+                "stock",
+                "district",
+                "customer",
+                "history",
+                "oorder",
+                "new_order",
+                "order_line"));
+      default:
+        return Collections.emptySet();
     }
   }
 

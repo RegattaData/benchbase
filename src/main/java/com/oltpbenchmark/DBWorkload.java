@@ -52,6 +52,16 @@ public class DBWorkload {
   private static final String RATE_UNLIMITED = "unlimited";
 
   /**
+   * The benchmarks that are supported for the REGATTA profile for create and load operations.
+   */
+  private static final Set<String> REGATTA_CREATE_LOAD_BENCHMARKS = Set.of("tpcc", "chbenchmark");
+
+    /**
+    * The benchmarks that are supported for the REGATTA profile for execute operations.
+    */
+  private static final Set<String> REGATTA_EXECUTE_BENCHMARKS = Set.of("chbenchmark");
+
+  /**
    * @param args
    * @throws Exception
    */
@@ -116,6 +126,8 @@ public class DBWorkload {
     String configFile = argsLine.getOptionValue("c");
 
     XMLConfiguration xmlConfig = buildConfiguration(configFile);
+
+    validateRegattaBenchmarkModes(argsLine, xmlConfig, targetList);
 
     // Load the configuration for each benchmark
     int lastTxnId = 0;
@@ -613,6 +625,52 @@ public class DBWorkload {
     options.addOption(null, "dialects-export", true, "Export benchmark SQL to a dialects file");
     options.addOption("jh", "json-histograms", true, "Export histograms to JSON file");
     return options;
+  }
+
+/**
+ * Enforces that when executing with the REGATTA profile, only chbenchmark + tpcc are used for
+ * create/load and only chbenchmark is used for execute, as these are the only workloads that
+ * have been validated with Regatta's current implementation.
+ * @param argsLine the command line arguments
+ * @param xmlConfig the XML configuration
+ * @param targetList the list of benchmarks to be executed
+ * @throws ParseException if an invalid benchmark is included for the REGATTA profile
+ */
+  private static void validateRegattaBenchmarkModes(
+      CommandLine argsLine, XMLConfiguration xmlConfig, String[] targetList) throws ParseException {
+    DatabaseType databaseType = DatabaseType.get(xmlConfig.getString("type"));
+    if (databaseType != DatabaseType.REGATTA) {
+      return;
+    }
+
+    List<String> normalizedBenchmarks = new ArrayList<>(targetList.length);
+    for (String benchmark : targetList) {
+      normalizedBenchmarks.add(benchmark.trim().toLowerCase(Locale.ROOT));
+    }
+
+    if (isBooleanOptionSet(argsLine, "create") || isBooleanOptionSet(argsLine, "load")) {
+      List<String> invalidBenchmarks =
+          normalizedBenchmarks.stream()
+              .filter(benchmark -> !REGATTA_CREATE_LOAD_BENCHMARKS.contains(benchmark))
+              .toList();
+      if (!invalidBenchmarks.isEmpty()) {
+        throw new ParseException(
+            "The REGATTA profile only supports tpcc and chbenchmark for --create and --load. Invalid benchmark(s): "
+                + invalidBenchmarks);
+      }
+    }
+
+    if (isBooleanOptionSet(argsLine, "execute")) {
+      List<String> invalidBenchmarks =
+          normalizedBenchmarks.stream()
+              .filter(benchmark -> !REGATTA_EXECUTE_BENCHMARKS.contains(benchmark))
+              .toList();
+      if (!invalidBenchmarks.isEmpty()) {
+        throw new ParseException(
+            "The REGATTA profile only supports chbenchmark for --execute. Invalid benchmark(s): "
+                + invalidBenchmarks);
+      }
+    }
   }
 
   public static XMLConfiguration buildConfiguration(String filename) throws ConfigurationException {
