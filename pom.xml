@@ -103,7 +103,7 @@
                 <dependency>
                     <groupId>dev.regatta</groupId>
                     <artifactId>regatta-jdbc</artifactId>
-                    <version>26.0.0</version>
+                    <version>26.0.2</version>
                 </dependency>
             </dependencies>
         </profile>
