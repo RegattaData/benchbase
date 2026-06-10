@@ -240,10 +240,8 @@ public abstract class BenchmarkModule {
    */
   public final void createDatabase(DatabaseType dbType, Connection conn)
       throws SQLException, IOException {
-    
-    /**
-     * Drop existing Regatta tables before creating new ones, if needed.
-     */
+
+    /** Drop existing Regatta tables before creating new ones, if needed. */
     if (dbType == DatabaseType.REGATTA) {
       dropExistingRegattaTables(conn);
     }
@@ -262,13 +260,14 @@ public abstract class BenchmarkModule {
     }
   }
 
-/**
- * Drops the existing Regatta tables if there are any.
- * This is needed because Regatta does not support "IF NOT EXISTS" semantics, and
- * attempting to create a table that already exists would result in an error.
- * @param conn the Connection handle to the database
- * @throws SQLException if there is an error executing the SQL statements to drop the tables
- */
+  /**
+   * Drops the existing Regatta tables if there are any. This is needed because Regatta does not
+   * support "IF NOT EXISTS" semantics, and attempting to create a table that already exists would
+   * result in an error.
+   *
+   * @param conn the Connection handle to the database
+   * @throws SQLException if there is an error executing the SQL statements to drop the tables
+   */
   private void dropExistingRegattaTables(Connection conn) throws SQLException {
     Set<String> tablesToDrop = getRegattaTablesForBenchmark();
     if (tablesToDrop.isEmpty()) {
@@ -294,12 +293,13 @@ public abstract class BenchmarkModule {
     }
   }
 
-/**
- * Returns the set of Regatta tables that should be dropped before loading the DDL for this benchmark.
- * The only supported benchmarks for Regatta are currently TPC-C and CH-benCHmark
- * @return the set of tables to be dropped for the current benchmark. If the benchmark is not one of
- * the supported ones, an empty set is returned.
- */
+  /**
+   * Returns the set of Regatta tables that should be dropped before loading the DDL for this
+   * benchmark. The only supported benchmarks for Regatta are currently TPC-C and CH-benCHmark
+   *
+   * @return the set of tables to be dropped for the current benchmark. If the benchmark is not one
+   *     of the supported ones, an empty set is returned.
+   */
   private Set<String> getRegattaTablesForBenchmark() {
     switch (this.getBenchmarkName()) {
       case "chbenchmark":
