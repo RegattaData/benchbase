@@ -22,6 +22,7 @@ import com.oltpbenchmark.benchmarks.tpcc.TPCCConfig;
 import com.oltpbenchmark.benchmarks.tpcc.TPCCConstants;
 import com.oltpbenchmark.benchmarks.tpcc.TPCCUtil;
 import com.oltpbenchmark.benchmarks.tpcc.TPCCWorker;
+import com.oltpbenchmark.types.DatabaseType;
 import java.math.BigDecimal;
 import java.sql.*;
 import java.util.Random;
@@ -36,9 +37,8 @@ public class Delivery extends TPCCProcedure {
       new SQLStmt(
           """
             SELECT NO_O_ID FROM %s
-             WHERE NO_D_ID = ?
-               AND NO_W_ID = ?
-             ORDER BY NO_O_ID ASC
+             WHERE NO_KEY BETWEEN ? AND ?
+             ORDER BY NO_KEY ASC
              LIMIT 1
         """
               .formatted(TPCCConstants.TABLENAME_NEWORDER));
@@ -47,9 +47,7 @@ public class Delivery extends TPCCProcedure {
       new SQLStmt(
           """
             DELETE FROM %s
-            WHERE NO_O_ID = ?
-            AND NO_D_ID = ?
-            AND NO_W_ID = ?
+        WHERE NO_KEY = ?
         """
               .formatted(TPCCConstants.TABLENAME_NEWORDER));
 
@@ -57,9 +55,7 @@ public class Delivery extends TPCCProcedure {
       new SQLStmt(
           """
             SELECT O_C_ID FROM %s
-            WHERE O_ID = ?
-            AND O_D_ID = ?
-            AND O_W_ID = ?
+        WHERE O_KEY = ?
         """
               .formatted(TPCCConstants.TABLENAME_OPENORDER));
 
@@ -68,9 +64,7 @@ public class Delivery extends TPCCProcedure {
           """
         UPDATE %s
            SET O_CARRIER_ID = ?
-         WHERE O_ID = ?
-           AND O_D_ID = ?
-           AND O_W_ID = ?
+         WHERE O_KEY = ?
     """
               .formatted(TPCCConstants.TABLENAME_OPENORDER));
 
@@ -79,9 +73,7 @@ public class Delivery extends TPCCProcedure {
           """
         UPDATE %s
            SET OL_DELIVERY_D = ?
-         WHERE OL_O_ID = ?
-           AND OL_D_ID = ?
-           AND OL_W_ID = ?
+         WHERE OL_O_KEY = ?
     """
               .formatted(TPCCConstants.TABLENAME_ORDERLINE));
 
@@ -90,9 +82,7 @@ public class Delivery extends TPCCProcedure {
           """
         SELECT SUM(OL_AMOUNT) AS OL_TOTAL
           FROM %s
-         WHERE OL_O_ID = ?
-           AND OL_D_ID = ?
-           AND OL_W_ID = ?
+         WHERE OL_O_KEY = ?
     """
               .formatted(TPCCConstants.TABLENAME_ORDERLINE));
 
@@ -102,9 +92,7 @@ public class Delivery extends TPCCProcedure {
         UPDATE %s
            SET C_BALANCE = C_BALANCE + ?,
                C_DELIVERY_CNT = C_DELIVERY_CNT + 1
-         WHERE C_W_ID = ?
-           AND C_D_ID = ?
-           AND C_ID = ?
+         WHERE C_KEY = ?
     """
               .formatted(TPCCConstants.TABLENAME_CUSTOMER));
 
@@ -176,8 +164,13 @@ public class Delivery extends TPCCProcedure {
   private Integer getOrderId(Connection conn, int w_id, int d_id) throws SQLException {
 
     try (PreparedStatement delivGetOrderId = this.getPreparedStatement(conn, delivGetOrderIdSQL)) {
-      delivGetOrderId.setInt(1, d_id);
-      delivGetOrderId.setInt(2, w_id);
+      if (this.getDbType() == DatabaseType.REGATTA) {
+        delivGetOrderId.setLong(1, TPCCUtil.concatOrderKey(w_id, d_id, 1));
+        delivGetOrderId.setLong(2, TPCCUtil.concatOrderKey(w_id, d_id, Integer.MAX_VALUE));
+      } else {
+        delivGetOrderId.setInt(1, d_id);
+        delivGetOrderId.setInt(2, w_id);
+      }
 
       try (ResultSet rs = delivGetOrderId.executeQuery()) {
 
@@ -197,9 +190,13 @@ public class Delivery extends TPCCProcedure {
   private void deleteOrder(Connection conn, int w_id, int d_id, int no_o_id) throws SQLException {
     try (PreparedStatement delivDeleteNewOrder =
         this.getPreparedStatement(conn, delivDeleteNewOrderSQL)) {
-      delivDeleteNewOrder.setInt(1, no_o_id);
-      delivDeleteNewOrder.setInt(2, d_id);
-      delivDeleteNewOrder.setInt(3, w_id);
+      if (this.getDbType() == DatabaseType.REGATTA) {
+        delivDeleteNewOrder.setLong(1, TPCCUtil.concatOrderKey(w_id, d_id, no_o_id));
+      } else {
+        delivDeleteNewOrder.setInt(1, no_o_id);
+        delivDeleteNewOrder.setInt(2, d_id);
+        delivDeleteNewOrder.setInt(3, w_id);
+      }
 
       int result = delivDeleteNewOrder.executeUpdate();
 
@@ -221,9 +218,13 @@ public class Delivery extends TPCCProcedure {
   private int getCustomerId(Connection conn, int w_id, int d_id, int no_o_id) throws SQLException {
 
     try (PreparedStatement delivGetCustId = this.getPreparedStatement(conn, delivGetCustIdSQL)) {
-      delivGetCustId.setInt(1, no_o_id);
-      delivGetCustId.setInt(2, d_id);
-      delivGetCustId.setInt(3, w_id);
+      if (this.getDbType() == DatabaseType.REGATTA) {
+        delivGetCustId.setLong(1, TPCCUtil.concatOrderKey(w_id, d_id, no_o_id));
+      } else {
+        delivGetCustId.setInt(1, no_o_id);
+        delivGetCustId.setInt(2, d_id);
+        delivGetCustId.setInt(3, w_id);
+      }
 
       try (ResultSet rs = delivGetCustId.executeQuery()) {
 
@@ -245,9 +246,13 @@ public class Delivery extends TPCCProcedure {
     try (PreparedStatement delivUpdateCarrierId =
         this.getPreparedStatement(conn, delivUpdateCarrierIdSQL)) {
       delivUpdateCarrierId.setInt(1, o_carrier_id);
-      delivUpdateCarrierId.setInt(2, no_o_id);
-      delivUpdateCarrierId.setInt(3, d_id);
-      delivUpdateCarrierId.setInt(4, w_id);
+      if (this.getDbType() == DatabaseType.REGATTA) {
+        delivUpdateCarrierId.setLong(2, TPCCUtil.concatOrderKey(w_id, d_id, no_o_id));
+      } else {
+        delivUpdateCarrierId.setInt(2, no_o_id);
+        delivUpdateCarrierId.setInt(3, d_id);
+        delivUpdateCarrierId.setInt(4, w_id);
+      }
 
       int result = delivUpdateCarrierId.executeUpdate();
 
@@ -267,9 +272,13 @@ public class Delivery extends TPCCProcedure {
     try (PreparedStatement delivUpdateDeliveryDate =
         this.getPreparedStatement(conn, delivUpdateDeliveryDateSQL)) {
       delivUpdateDeliveryDate.setTimestamp(1, timestamp);
-      delivUpdateDeliveryDate.setInt(2, no_o_id);
-      delivUpdateDeliveryDate.setInt(3, d_id);
-      delivUpdateDeliveryDate.setInt(4, w_id);
+      if (this.getDbType() == DatabaseType.REGATTA) {
+        delivUpdateDeliveryDate.setLong(2, TPCCUtil.concatOrderKey(w_id, d_id, no_o_id));
+      } else {
+        delivUpdateDeliveryDate.setInt(2, no_o_id);
+        delivUpdateDeliveryDate.setInt(3, d_id);
+        delivUpdateDeliveryDate.setInt(4, w_id);
+      }
 
       int result = delivUpdateDeliveryDate.executeUpdate();
 
@@ -287,9 +296,13 @@ public class Delivery extends TPCCProcedure {
       throws SQLException {
     try (PreparedStatement delivSumOrderAmount =
         this.getPreparedStatement(conn, delivSumOrderAmountSQL)) {
-      delivSumOrderAmount.setInt(1, no_o_id);
-      delivSumOrderAmount.setInt(2, d_id);
-      delivSumOrderAmount.setInt(3, w_id);
+      if (this.getDbType() == DatabaseType.REGATTA) {
+        delivSumOrderAmount.setLong(1, TPCCUtil.concatOrderKey(w_id, d_id, no_o_id));
+      } else {
+        delivSumOrderAmount.setInt(1, no_o_id);
+        delivSumOrderAmount.setInt(2, d_id);
+        delivSumOrderAmount.setInt(3, w_id);
+      }
 
       try (ResultSet rs = delivSumOrderAmount.executeQuery()) {
         if (!rs.next()) {
@@ -311,9 +324,13 @@ public class Delivery extends TPCCProcedure {
     try (PreparedStatement delivUpdateCustBalDelivCnt =
         this.getPreparedStatement(conn, delivUpdateCustBalDelivCntSQL)) {
       delivUpdateCustBalDelivCnt.setBigDecimal(1, BigDecimal.valueOf(orderLineTotal));
-      delivUpdateCustBalDelivCnt.setInt(2, w_id);
-      delivUpdateCustBalDelivCnt.setInt(3, d_id);
-      delivUpdateCustBalDelivCnt.setInt(4, c_id);
+      if (this.getDbType() == DatabaseType.REGATTA) {
+        delivUpdateCustBalDelivCnt.setLong(2, TPCCUtil.concatCustomerKey(w_id, d_id, c_id));
+      } else {
+        delivUpdateCustBalDelivCnt.setInt(2, w_id);
+        delivUpdateCustBalDelivCnt.setInt(3, d_id);
+        delivUpdateCustBalDelivCnt.setInt(4, c_id);
+      }
 
       int result = delivUpdateCustBalDelivCnt.executeUpdate();
 

@@ -23,6 +23,7 @@ import com.oltpbenchmark.benchmarks.tpcc.TPCCUtil;
 import com.oltpbenchmark.benchmarks.tpcc.TPCCWorker;
 import com.oltpbenchmark.benchmarks.tpcc.pojo.Customer;
 import com.oltpbenchmark.benchmarks.tpcc.pojo.Oorder;
+import com.oltpbenchmark.types.DatabaseType;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -115,7 +116,7 @@ public class OrderStatus extends TPCCProcedure {
     Customer c;
 
     if (c_by_name) {
-      c = getCustomerByName(w_id, d_id, c_last, conn);
+      c = getCustomerByName(w_id, d_id, c_last, numWarehouses, conn);
     } else {
       c = getCustomerById(w_id, d_id, c_id, conn);
     }
@@ -180,9 +181,13 @@ public class OrderStatus extends TPCCProcedure {
       // find the newest order for the customer
       // retrieve the carrier & order date for the most recent order.
 
-      ordStatGetNewestOrd.setInt(1, w_id);
-      ordStatGetNewestOrd.setInt(2, d_id);
-      ordStatGetNewestOrd.setInt(3, c.c_id);
+      if (this.getDbType() == DatabaseType.REGATTA) {
+        ordStatGetNewestOrd.setLong(1, TPCCUtil.concatCustomerKey(w_id, d_id, c.c_id));
+      } else {
+        ordStatGetNewestOrd.setInt(1, w_id);
+        ordStatGetNewestOrd.setInt(2, d_id);
+        ordStatGetNewestOrd.setInt(3, c.c_id);
+      }
 
       try (ResultSet rs = ordStatGetNewestOrd.executeQuery()) {
 
@@ -209,9 +214,13 @@ public class OrderStatus extends TPCCProcedure {
 
     try (PreparedStatement ordStatGetOrderLines =
         this.getPreparedStatement(conn, ordStatGetOrderLinesSQL)) {
-      ordStatGetOrderLines.setInt(1, o_id);
-      ordStatGetOrderLines.setInt(2, d_id);
-      ordStatGetOrderLines.setInt(3, w_id);
+      if (this.getDbType() == DatabaseType.REGATTA) {
+        ordStatGetOrderLines.setLong(1, TPCCUtil.concatOrderKey(w_id, d_id, o_id));
+      } else {
+        ordStatGetOrderLines.setInt(1, o_id);
+        ordStatGetOrderLines.setInt(2, d_id);
+        ordStatGetOrderLines.setInt(3, w_id);
+      }
 
       try (ResultSet rs = ordStatGetOrderLines.executeQuery()) {
 
@@ -255,9 +264,13 @@ public class OrderStatus extends TPCCProcedure {
 
     try (PreparedStatement payGetCust = this.getPreparedStatement(conn, payGetCustSQL)) {
 
-      payGetCust.setInt(1, c_w_id);
-      payGetCust.setInt(2, c_d_id);
-      payGetCust.setInt(3, c_id);
+      if (this.getDbType() == DatabaseType.REGATTA) {
+        payGetCust.setLong(1, TPCCUtil.concatCustomerKey(c_w_id, c_d_id, c_id));
+      } else {
+        payGetCust.setInt(1, c_w_id);
+        payGetCust.setInt(2, c_d_id);
+        payGetCust.setInt(3, c_id);
+      }
 
       try (ResultSet rs = payGetCust.executeQuery()) {
 
@@ -279,15 +292,23 @@ public class OrderStatus extends TPCCProcedure {
 
   // attention this code is repeated in other transacitons... ok for now to
   // allow for separate statements.
-  public Customer getCustomerByName(int c_w_id, int c_d_id, String c_last, Connection conn)
+  public Customer getCustomerByName(
+      int c_w_id, int c_d_id, String c_last, int numWarehouses, Connection conn)
       throws SQLException {
     ArrayList<Customer> customers = new ArrayList<>();
 
     try (PreparedStatement customerByName = this.getPreparedStatement(conn, customerByNameSQL)) {
-
-      customerByName.setInt(1, c_w_id);
-      customerByName.setInt(2, c_d_id);
-      customerByName.setString(3, c_last);
+      if (this.getDbType() == DatabaseType.REGATTA) {
+        int maxWarehouseDigits = Integer.toString(Math.max(numWarehouses, 1)).length();
+        customerByName.setString(
+            1, TPCCUtil.customerNameLookupLowerBound(c_w_id, c_d_id, c_last, maxWarehouseDigits));
+        customerByName.setString(
+            2, TPCCUtil.customerNameLookupUpperBound(c_w_id, c_d_id, c_last, maxWarehouseDigits));
+      } else {
+        customerByName.setInt(1, c_w_id);
+        customerByName.setInt(2, c_d_id);
+        customerByName.setString(3, c_last);
+      }
 
       try (ResultSet rs = customerByName.executeQuery()) {
         while (rs.next()) {
