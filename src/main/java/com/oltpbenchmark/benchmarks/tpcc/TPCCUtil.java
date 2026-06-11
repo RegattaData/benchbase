@@ -27,6 +27,14 @@ import java.util.Random;
 
 public class TPCCUtil {
 
+  // Surrogate key packing constants for Regatta's single-column index mode.
+  private static final int DISTRICT_BITS = 4;
+  private static final int CUSTOMER_BITS = 32;
+  private static final int ORDER_BITS = 37;
+  private static final long ORDER_MASK = (1L << ORDER_BITS) - 1;
+  private static final String SMALLEST_FIRST_NAME = "0";
+  private static final String LARGEST_FIRST_NAME = "zzzzzzzzzzzzzzzz";
+
   /**
    * Creates a Customer object from the current row in the given ResultSet. The caller is
    * responsible for closing the ResultSet.
@@ -122,5 +130,42 @@ public class TPCCUtil {
 
   public static int nonUniformRandom(int A, int C, int min, int max, Random r) {
     return (((randomNumber(0, A, r) | randomNumber(min, max, r)) + C) % (max - min + 1)) + min;
+  }
+
+  public static long concatDistrictKey(int warehouseId, int districtId) {
+    return ((long) warehouseId << DISTRICT_BITS) | (districtId & 0xF);
+  }
+
+  public static long concatCustomerKey(int warehouseId, int districtId, int customerId) {
+    long districtKey = concatDistrictKey(warehouseId, districtId);
+    return (districtKey << CUSTOMER_BITS) | (customerId & 0xFFFF_FFFFL);
+  }
+
+  public static long concatOrderKey(int warehouseId, int districtId, int orderId) {
+    long districtKey = concatDistrictKey(warehouseId, districtId);
+    return (districtKey << ORDER_BITS) | (orderId & ORDER_MASK);
+  }
+
+  public static long concatWarehouseItemKey(int warehouseId, int itemId) {
+    return ((long) warehouseId << 32) | (itemId & 0xFFFF_FFFFL);
+  }
+
+  public static String concatCustomerLastFirstKey(
+      int warehouseId, int districtId, String last, String first, int maxWarehouseDigits) {
+    // Keep lexicographic order deterministic by padding warehouse and district.
+    return String.format(
+        "%0" + maxWarehouseDigits + "d%02d%s%s", warehouseId, districtId, last, first);
+  }
+
+  public static String customerNameLookupLowerBound(
+      int warehouseId, int districtId, String last, int maxWarehouseDigits) {
+    return concatCustomerLastFirstKey(
+        warehouseId, districtId, last, SMALLEST_FIRST_NAME, maxWarehouseDigits);
+  }
+
+  public static String customerNameLookupUpperBound(
+      int warehouseId, int districtId, String last, int maxWarehouseDigits) {
+    return concatCustomerLastFirstKey(
+        warehouseId, districtId, last, LARGEST_FIRST_NAME, maxWarehouseDigits);
   }
 }

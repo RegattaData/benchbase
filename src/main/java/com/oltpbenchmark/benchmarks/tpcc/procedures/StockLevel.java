@@ -21,6 +21,7 @@ import com.oltpbenchmark.api.SQLStmt;
 import com.oltpbenchmark.benchmarks.tpcc.TPCCConstants;
 import com.oltpbenchmark.benchmarks.tpcc.TPCCUtil;
 import com.oltpbenchmark.benchmarks.tpcc.TPCCWorker;
+import com.oltpbenchmark.types.DatabaseType;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -94,8 +95,12 @@ public class StockLevel extends TPCCProcedure {
   private int getOrderId(Connection conn, int w_id, int d_id) throws SQLException {
     try (PreparedStatement stockGetDistOrderId =
         this.getPreparedStatement(conn, stockGetDistOrderIdSQL)) {
-      stockGetDistOrderId.setInt(1, w_id);
-      stockGetDistOrderId.setInt(2, d_id);
+      if (this.getDbType() == DatabaseType.REGATTA) {
+        stockGetDistOrderId.setLong(1, TPCCUtil.concatDistrictKey(w_id, d_id));
+      } else {
+        stockGetDistOrderId.setInt(1, w_id);
+        stockGetDistOrderId.setInt(2, d_id);
+      }
 
       try (ResultSet rs = stockGetDistOrderId.executeQuery()) {
 
@@ -111,12 +116,19 @@ public class StockLevel extends TPCCProcedure {
       throws SQLException {
     try (PreparedStatement stockGetCountStock =
         this.getPreparedStatement(conn, stockGetCountStockSQL)) {
-      stockGetCountStock.setInt(1, w_id);
-      stockGetCountStock.setInt(2, d_id);
-      stockGetCountStock.setInt(3, o_id);
-      stockGetCountStock.setInt(4, o_id - 20);
-      stockGetCountStock.setInt(5, w_id);
-      stockGetCountStock.setInt(6, threshold);
+      if (this.getDbType() == DatabaseType.REGATTA) {
+        int lowerOId = Math.max(1, o_id - 20);
+        stockGetCountStock.setLong(1, TPCCUtil.concatOrderKey(w_id, d_id, o_id));
+        stockGetCountStock.setLong(2, TPCCUtil.concatOrderKey(w_id, d_id, lowerOId));
+        stockGetCountStock.setInt(3, threshold);
+      } else {
+        stockGetCountStock.setInt(1, w_id);
+        stockGetCountStock.setInt(2, d_id);
+        stockGetCountStock.setInt(3, o_id);
+        stockGetCountStock.setInt(4, o_id - 20);
+        stockGetCountStock.setInt(5, w_id);
+        stockGetCountStock.setInt(6, threshold);
+      }
 
       try (ResultSet rs = stockGetCountStock.executeQuery()) {
         if (!rs.next()) {

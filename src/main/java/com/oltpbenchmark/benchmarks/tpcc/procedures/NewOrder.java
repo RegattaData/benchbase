@@ -23,6 +23,7 @@ import com.oltpbenchmark.benchmarks.tpcc.TPCCConstants;
 import com.oltpbenchmark.benchmarks.tpcc.TPCCUtil;
 import com.oltpbenchmark.benchmarks.tpcc.TPCCWorker;
 import com.oltpbenchmark.benchmarks.tpcc.pojo.Stock;
+import com.oltpbenchmark.types.DatabaseType;
 import java.sql.*;
 import java.util.Random;
 import org.slf4j.Logger;
@@ -231,6 +232,10 @@ public class NewOrder extends TPCCProcedure {
         stmtInsertOrderLine.setInt(7, ol_quantity);
         stmtInsertOrderLine.setDouble(8, ol_amount);
         stmtInsertOrderLine.setString(9, ol_dist_info);
+        if (this.getDbType() == DatabaseType.REGATTA) {
+          stmtInsertOrderLine.setLong(10, TPCCUtil.concatOrderKey(w_id, d_id, d_next_o_id));
+          stmtInsertOrderLine.setLong(11, TPCCUtil.concatWarehouseItemKey(ol_supply_w_id, ol_i_id));
+        }
         stmtInsertOrderLine.addBatch();
 
         int s_remote_cnt_increment;
@@ -244,8 +249,12 @@ public class NewOrder extends TPCCProcedure {
         stmtUpdateStock.setInt(1, s.s_quantity);
         stmtUpdateStock.setInt(2, ol_quantity);
         stmtUpdateStock.setInt(3, s_remote_cnt_increment);
-        stmtUpdateStock.setInt(4, ol_i_id);
-        stmtUpdateStock.setInt(5, ol_supply_w_id);
+        if (this.getDbType() == DatabaseType.REGATTA) {
+          stmtUpdateStock.setLong(4, TPCCUtil.concatWarehouseItemKey(ol_supply_w_id, ol_i_id));
+        } else {
+          stmtUpdateStock.setInt(4, ol_i_id);
+          stmtUpdateStock.setInt(5, ol_supply_w_id);
+        }
         stmtUpdateStock.addBatch();
       }
 
@@ -276,8 +285,12 @@ public class NewOrder extends TPCCProcedure {
   private Stock getStock(Connection conn, int ol_supply_w_id, int ol_i_id, int ol_quantity)
       throws SQLException {
     try (PreparedStatement stmtGetStock = this.getPreparedStatement(conn, stmtGetStockSQL)) {
-      stmtGetStock.setInt(1, ol_i_id);
-      stmtGetStock.setInt(2, ol_supply_w_id);
+      if (this.getDbType() == DatabaseType.REGATTA) {
+        stmtGetStock.setLong(1, TPCCUtil.concatWarehouseItemKey(ol_supply_w_id, ol_i_id));
+      } else {
+        stmtGetStock.setInt(1, ol_i_id);
+        stmtGetStock.setInt(2, ol_supply_w_id);
+      }
       try (ResultSet rs = stmtGetStock.executeQuery()) {
         if (!rs.next()) {
           throw new RuntimeException("S_I_ID=" + ol_i_id + " not found!");
@@ -324,9 +337,16 @@ public class NewOrder extends TPCCProcedure {
   private void insertNewOrder(Connection conn, int w_id, int d_id, int o_id) throws SQLException {
     try (PreparedStatement stmtInsertNewOrder =
         this.getPreparedStatement(conn, stmtInsertNewOrderSQL); ) {
-      stmtInsertNewOrder.setInt(1, o_id);
-      stmtInsertNewOrder.setInt(2, d_id);
-      stmtInsertNewOrder.setInt(3, w_id);
+      if (this.getDbType() == DatabaseType.REGATTA) {
+        stmtInsertNewOrder.setInt(1, o_id);
+        stmtInsertNewOrder.setInt(2, d_id);
+        stmtInsertNewOrder.setInt(3, w_id);
+        stmtInsertNewOrder.setLong(4, TPCCUtil.concatOrderKey(w_id, d_id, o_id));
+      } else {
+        stmtInsertNewOrder.setInt(1, o_id);
+        stmtInsertNewOrder.setInt(2, d_id);
+        stmtInsertNewOrder.setInt(3, w_id);
+      }
       int result = stmtInsertNewOrder.executeUpdate();
 
       if (result == 0) {
@@ -340,13 +360,25 @@ public class NewOrder extends TPCCProcedure {
       throws SQLException {
     try (PreparedStatement stmtInsertOOrder =
         this.getPreparedStatement(conn, stmtInsertOOrderSQL); ) {
-      stmtInsertOOrder.setInt(1, o_id);
-      stmtInsertOOrder.setInt(2, d_id);
-      stmtInsertOOrder.setInt(3, w_id);
-      stmtInsertOOrder.setInt(4, c_id);
-      stmtInsertOOrder.setTimestamp(5, new Timestamp(System.currentTimeMillis()));
-      stmtInsertOOrder.setInt(6, o_ol_cnt);
-      stmtInsertOOrder.setInt(7, o_all_local);
+      if (this.getDbType() == DatabaseType.REGATTA) {
+        stmtInsertOOrder.setInt(1, o_id);
+        stmtInsertOOrder.setInt(2, d_id);
+        stmtInsertOOrder.setInt(3, w_id);
+        stmtInsertOOrder.setInt(4, c_id);
+        stmtInsertOOrder.setTimestamp(5, new Timestamp(System.currentTimeMillis()));
+        stmtInsertOOrder.setInt(6, o_ol_cnt);
+        stmtInsertOOrder.setInt(7, o_all_local);
+        stmtInsertOOrder.setLong(8, TPCCUtil.concatOrderKey(w_id, d_id, o_id));
+        stmtInsertOOrder.setLong(9, TPCCUtil.concatCustomerKey(w_id, d_id, c_id));
+      } else {
+        stmtInsertOOrder.setInt(1, o_id);
+        stmtInsertOOrder.setInt(2, d_id);
+        stmtInsertOOrder.setInt(3, w_id);
+        stmtInsertOOrder.setInt(4, c_id);
+        stmtInsertOOrder.setTimestamp(5, new Timestamp(System.currentTimeMillis()));
+        stmtInsertOOrder.setInt(6, o_ol_cnt);
+        stmtInsertOOrder.setInt(7, o_all_local);
+      }
 
       int result = stmtInsertOOrder.executeUpdate();
 
@@ -358,8 +390,12 @@ public class NewOrder extends TPCCProcedure {
 
   private void updateDistrict(Connection conn, int w_id, int d_id) throws SQLException {
     try (PreparedStatement stmtUpdateDist = this.getPreparedStatement(conn, stmtUpdateDistSQL)) {
-      stmtUpdateDist.setInt(1, w_id);
-      stmtUpdateDist.setInt(2, d_id);
+      if (this.getDbType() == DatabaseType.REGATTA) {
+        stmtUpdateDist.setLong(1, TPCCUtil.concatDistrictKey(w_id, d_id));
+      } else {
+        stmtUpdateDist.setInt(1, w_id);
+        stmtUpdateDist.setInt(2, d_id);
+      }
       int result = stmtUpdateDist.executeUpdate();
       if (result == 0) {
         throw new RuntimeException(
@@ -370,8 +406,12 @@ public class NewOrder extends TPCCProcedure {
 
   private int getDistrict(Connection conn, int w_id, int d_id) throws SQLException {
     try (PreparedStatement stmtGetDist = this.getPreparedStatement(conn, stmtGetDistSQL)) {
-      stmtGetDist.setInt(1, w_id);
-      stmtGetDist.setInt(2, d_id);
+      if (this.getDbType() == DatabaseType.REGATTA) {
+        stmtGetDist.setLong(1, TPCCUtil.concatDistrictKey(w_id, d_id));
+      } else {
+        stmtGetDist.setInt(1, w_id);
+        stmtGetDist.setInt(2, d_id);
+      }
       try (ResultSet rs = stmtGetDist.executeQuery()) {
         if (!rs.next()) {
           throw new RuntimeException("D_ID=" + d_id + " D_W_ID=" + w_id + " not found!");
@@ -394,9 +434,13 @@ public class NewOrder extends TPCCProcedure {
 
   private void getCustomer(Connection conn, int w_id, int d_id, int c_id) throws SQLException {
     try (PreparedStatement stmtGetCust = this.getPreparedStatement(conn, stmtGetCustSQL)) {
-      stmtGetCust.setInt(1, w_id);
-      stmtGetCust.setInt(2, d_id);
-      stmtGetCust.setInt(3, c_id);
+      if (this.getDbType() == DatabaseType.REGATTA) {
+        stmtGetCust.setLong(1, TPCCUtil.concatCustomerKey(w_id, d_id, c_id));
+      } else {
+        stmtGetCust.setInt(1, w_id);
+        stmtGetCust.setInt(2, d_id);
+        stmtGetCust.setInt(3, c_id);
+      }
       try (ResultSet rs = stmtGetCust.executeQuery()) {
         if (!rs.next()) {
           throw new RuntimeException("C_D_ID=" + d_id + " C_ID=" + c_id + " not found!");

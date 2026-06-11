@@ -1,6 +1,47 @@
 <?xml version="1.0"?>
 <dialects>
     <dialect type="REGATTA">
+        <procedure name="Q2">
+            <statement name="query_stmt">
+                WITH europe_stock AS (
+                    SELECT s_i_id, s_quantity,
+                           su_suppkey, su_name, su_address, su_phone, su_comment,
+                           n_name
+                    FROM stock, supplier, nation, region
+                    WHERE MOD((s_w_id * s_i_id), 10000) = su_suppkey
+                      AND su_nationkey = n_nationkey
+                      AND n_regionkey = r_regionkey
+                      AND r_name LIKE 'Europ%'
+                ),
+                min_qty AS (
+                    SELECT s_i_id AS m_i_id, MIN(s_quantity) AS m_s_quantity
+                    FROM europe_stock
+                    GROUP BY s_i_id
+                )
+                SELECT su_suppkey, su_name, n_name, i_id, i_name,
+                       su_address, su_phone, su_comment
+                FROM item, europe_stock, min_qty
+                WHERE i_id = europe_stock.s_i_id
+                  AND i_data LIKE '%b'
+                  AND i_id = m_i_id
+                  AND europe_stock.s_quantity = m_s_quantity
+                ORDER BY n_name, su_name, i_id
+            </statement>
+        </procedure>
+        <procedure name="Q3">
+            <statement name="query_stmt">
+                SELECT ol_o_id, ol_w_id, ol_d_id,
+                       sum(ol_amount) AS revenue, o_entry_d
+                FROM customer, new_order, oorder, order_line
+                WHERE c_state LIKE 'A%'
+                  AND c_key = o_c_key
+                  AND no_key = o_key
+                  AND ol_o_key = o_key
+                  AND o_entry_d &gt; '2007-01-02 00:00:00.000000'
+                GROUP BY ol_o_id, ol_w_id, ol_d_id, o_entry_d
+                ORDER BY revenue DESC, o_entry_d
+            </statement>
+        </procedure>
         <procedure name="Q4">
             <statement name="query_stmt">
                 SELECT o.o_ol_cnt, COUNT(*) AS order_count
@@ -9,7 +50,7 @@
                 ON  o.o_id    = ol.ol_o_id
                 AND o.o_w_id  = ol.ol_w_id
                 AND o.o_d_id  = ol.ol_d_id
-                AND ol.ol_delivery_d >= o.o_entry_d
+                AND ol.ol_delivery_d &gt;= o.o_entry_d
                 WHERE ol.ol_o_id IS NOT NULL
                 GROUP BY o.o_ol_cnt
                 ORDER BY o.o_ol_cnt
@@ -26,12 +67,8 @@
                     supplier,
                     nation,
                     region
-                WHERE c_id = o_c_id
-                AND c_w_id = o_w_id
-                AND c_d_id = o_d_id
-                AND ol_o_id = o_id
-                AND ol_w_id = o_w_id
-                AND ol_d_id = o_d_id
+                WHERE c_key = o_c_key
+                AND ol_o_key = o_key
                 AND ol_w_id = s_w_id
                 AND ol_i_id = s_i_id
                 AND MOD((s_w_id * s_i_id), 10000) = su_suppkey
@@ -39,7 +76,7 @@
                 AND su_nationkey = n_nationkey
                 AND n_regionkey = r_regionkey
                 AND r_name = 'Europe'
-                AND o_entry_d >= '2007-01-02 00:00:00.000000'
+                AND o_entry_d &gt;= '2007-01-02 00:00:00.000000'
                 GROUP BY n_name
                 ORDER BY revenue DESC
             </statement>
@@ -57,8 +94,7 @@
                     customer,
                     nation n1,
                     nation n2
-                WHERE ol_supply_w_id = s_w_id
-                AND ol_i_id = s_i_id
+                WHERE ol_w_i_key = s_w_i_key
                 AND MOD((s_w_id * s_i_id), 10000) = su_suppkey
                 AND ol_w_id = o_w_id
                 AND ol_d_id = o_d_id
@@ -92,8 +128,7 @@
                     nation n2,
                     region
                 WHERE i_id = s_i_id
-                AND ol_i_id = s_i_id
-                AND ol_supply_w_id = s_w_id
+                AND ol_w_i_key = s_w_i_key
                 AND MOD((s_w_id * s_i_id), 10000) = su_suppkey
                 AND ol_w_id = o_w_id
                 AND ol_d_id = o_d_id
@@ -110,6 +145,22 @@
                 AND i_id = ol_i_id
                 GROUP BY l_year
                 ORDER BY l_year
+            </statement>
+        </procedure>
+        <procedure name="Q9">
+            <statement name="query_stmt">
+                SELECT n_name,
+                    extract(YEAR FROM o_entry_d) AS l_year,
+                    sum(ol_amount) AS sum_profit
+                FROM item, stock, supplier, order_line, oorder, nation
+                WHERE ol_w_i_key = s_w_i_key
+                  AND MOD((s_w_id * s_i_id), 10000) = su_suppkey
+                  AND ol_o_key = o_key
+                  AND ol_i_id = i_id
+                  AND su_nationkey = n_nationkey
+                  AND i_data LIKE '%bb'
+                GROUP BY n_name, l_year
+                ORDER BY n_name, l_year DESC
             </statement>
         </procedure>
         <procedure name="Q10">
@@ -130,7 +181,7 @@
                 AND ol_w_id = o_w_id
                 AND ol_d_id = o_d_id
                 AND ol_o_id = o_id
-                AND o_entry_d >= '2007-01-02 00:00:00.000000'
+                AND o_entry_d &gt;= '2007-01-02 00:00:00.000000'
                 AND o_entry_d &lt;= ol_delivery_d
                 AND n_nationkey = c_state_key
                 GROUP BY c_id,
@@ -141,6 +192,48 @@
                 ORDER BY revenue DESC
             </statement>
         </procedure>
+        <procedure name="Q11">
+            <statement name="query_stmt">
+                WITH germany_stock AS (
+                    SELECT s_i_id, sum(s_order_cnt) AS ordercount
+                    FROM stock, supplier, nation
+                    WHERE mod((s_w_id * s_i_id), 10000) = su_suppkey
+                      AND su_nationkey = n_nationkey
+                      AND n_name = 'Germany'
+                    GROUP BY s_i_id
+                )
+                SELECT s_i_id, ordercount
+                FROM germany_stock
+                WHERE ordercount &gt; (SELECT sum(ordercount) * 0.005 FROM germany_stock)
+                ORDER BY ordercount DESC
+            </statement>
+        </procedure>
+        <procedure name="Q12">
+            <statement name="query_stmt">
+                SELECT o_ol_cnt,
+                    sum(CASE WHEN o_carrier_id = 1 OR o_carrier_id = 2 THEN 1 ELSE 0 END) AS high_line_count,
+                    sum(CASE WHEN o_carrier_id != 1 AND o_carrier_id != 2 THEN 1 ELSE 0 END) AS low_line_count
+                FROM oorder, order_line
+                WHERE ol_o_key = o_key
+                  AND o_entry_d &lt;= ol_delivery_d
+                  AND ol_delivery_d &lt; '2020-01-01 00:00:00.000000'
+                GROUP BY o_ol_cnt
+                ORDER BY o_ol_cnt
+            </statement>
+        </procedure>
+        <procedure name="Q13">
+            <statement name="query_stmt">
+                SELECT c_count, count(*) AS custdist
+                FROM (
+                    SELECT c_id, count(o_id) AS c_count
+                    FROM customer
+                    LEFT OUTER JOIN oorder ON (c_key = o_c_key AND o_carrier_id &gt; 8)
+                    GROUP BY c_id
+                ) AS c_orders
+                GROUP BY c_count
+                ORDER BY custdist DESC, c_count DESC
+            </statement>
+        </procedure>
         <procedure name="Q15">
             <!-- Dummy statement to avoid view creation -->
             <statement name="createview_stmt">
@@ -149,24 +242,18 @@
                 WHERE 1 = 0
             </statement>
             <statement name="query_stmt">
-                SELECT su_suppkey, su_name, su_address, su_phone, total_revenue
-                FROM supplier,
-                    (SELECT mod((s_w_id * s_i_id), 10000) AS supplier_no,
-                            sum(ol_amount)                 AS total_revenue
+                WITH revenue0 AS (
+                    SELECT mod((s_w_id * s_i_id), 10000) AS supplier_no,
+                           sum(ol_amount) AS total_revenue
                     FROM order_line, stock
-                    WHERE ol_i_id = s_i_id
-                        AND ol_supply_w_id = s_w_id
-                        AND ol_delivery_d >= '2007-01-02 00:00:00.000000'
-                    GROUP BY supplier_no) revenue0
+                    WHERE ol_w_i_key = s_w_i_key
+                      AND ol_delivery_d &gt;= '2007-01-02 00:00:00.000000'
+                    GROUP BY supplier_no
+                )
+                SELECT su_suppkey, su_name, su_address, su_phone, total_revenue
+                FROM supplier, revenue0
                 WHERE su_suppkey = supplier_no
-                AND total_revenue = (SELECT max(total_revenue)
-                                    FROM (SELECT mod((s_w_id * s_i_id), 10000) AS supplier_no,
-                                                    sum(ol_amount)                 AS total_revenue
-                                            FROM order_line, stock
-                                            WHERE ol_i_id = s_i_id
-                                            AND ol_supply_w_id = s_w_id
-                                            AND ol_delivery_d >= '2007-01-02 00:00:00.000000'
-                                            GROUP BY supplier_no) revenue0_inner)
+                  AND total_revenue = (SELECT max(total_revenue) FROM revenue0)
                 ORDER BY su_suppkey
             </statement>
             <statement name="dropview_stmt">
@@ -174,6 +261,33 @@
                 UPDATE supplier
                 SET su_suppkey = su_suppkey
                 WHERE 1 = 0
+            </statement>
+        </procedure>
+        <procedure name="Q17">
+            <statement name="query_stmt">
+                WITH item_avg AS (
+                    SELECT i_id, AVG(ol_quantity) AS a
+                    FROM item, order_line
+                    WHERE i_data LIKE '%b'
+                      AND ol_i_id = i_id
+                    GROUP BY i_id
+                )
+                SELECT SUM(ol_amount) / 2.0 AS avg_yearly
+                FROM order_line, item_avg
+                WHERE ol_i_id = item_avg.i_id
+                  AND ol_quantity &lt; item_avg.a
+            </statement>
+        </procedure>
+        <procedure name="Q18">
+            <statement name="query_stmt">
+                SELECT c_last, c_id, o_id, o_entry_d, o_ol_cnt,
+                       sum(ol_amount) AS amount_sum
+                FROM customer, oorder, order_line
+                WHERE c_key = o_c_key
+                  AND ol_o_key = o_key
+                GROUP BY o_id, o_w_id, o_d_id, c_id, c_last, o_entry_d, o_ol_cnt
+                HAVING sum(ol_amount) &gt; 200
+                ORDER BY amount_sum DESC, o_entry_d
             </statement>
         </procedure>
         <procedure name="Q21">
@@ -192,12 +306,12 @@
                 ON l1.ol_o_id = o_id
                 AND l1.ol_w_id = o_w_id
                 AND l1.ol_d_id = o_d_id
-                AND l1.ol_delivery_d > o_entry_d
+                AND l1.ol_delivery_d &gt; o_entry_d
                 LEFT JOIN order_line l2
                 ON l2.ol_o_id = l1.ol_o_id
                 AND l2.ol_w_id = l1.ol_w_id
                 AND l2.ol_d_id = l1.ol_d_id
-                AND l2.ol_delivery_d > l1.ol_delivery_d
+                AND l2.ol_delivery_d &gt; l1.ol_delivery_d
                 WHERE l2.ol_o_id IS NULL
                 GROUP BY su_name
                 ORDER BY numwait DESC, su_name
@@ -208,7 +322,7 @@
                 WITH avg_balance AS (
                     SELECT AVG(c_balance) AS threshold
                     FROM customer
-                    WHERE c_balance > 0.00
+                    WHERE c_balance &gt; 0.00
                     AND SUBSTRING(c_phone FROM 1 FOR 1) IN ('1','2','3','4','5','6','7')
                 )
                 SELECT SUBSTRING(c_state FROM 1 FOR 1) AS country,
@@ -221,7 +335,7 @@
                 AND o_w_id = c_w_id
                 AND o_d_id = c_d_id
                 WHERE SUBSTRING(c_phone FROM 1 FOR 1) IN ('1','2','3','4','5','6','7')
-                AND c_balance > avg_balance.threshold
+                AND c_balance &gt; avg_balance.threshold
                 AND o_c_id IS NULL
                 GROUP BY SUBSTRING(c_state FROM 1 FOR 1)
                 ORDER BY SUBSTRING(c_state FROM 1 FOR 1)
