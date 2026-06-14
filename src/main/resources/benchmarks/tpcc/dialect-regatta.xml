@@ -2,19 +2,185 @@
 <dialects>
     <dialect type="REGATTA">
         <procedure name="NewOrder">
+
+            <statement name="stmtGetCustSQL">
+                SELECT C_DISCOUNT, C_LAST, C_CREDIT
+                  FROM CUSTOMER
+                 WHERE C_KEY = ?
+            </statement>
             <statement name="stmtGetDistSQL">
                 SELECT D_NEXT_O_ID, D_TAX
                   FROM DISTRICT
-                 WHERE D_W_ID = ?
-                   AND D_ID = ?
+                 WHERE D_KEY = ?
+
             </statement>
             <statement name="stmtGetStockSQL">
                 SELECT S_QUANTITY, S_DATA, S_DIST_01, S_DIST_02, S_DIST_03, S_DIST_04, S_DIST_05,
                        S_DIST_06, S_DIST_07, S_DIST_08, S_DIST_09, S_DIST_10
                   FROM STOCK
-                 WHERE S_I_ID = ?
-                   AND S_W_ID = ?
+                 WHERE S_W_I_KEY = ?
+            </statement>
+            <statement name="stmtUpdateDistSQL">
+                UPDATE DISTRICT
+                   SET D_NEXT_O_ID = D_NEXT_O_ID + 1
+                 WHERE D_KEY = ?
+            </statement>
+            <statement name="stmtInsertNewOrderSQL">
+                INSERT INTO NEW_ORDER
+                 (NO_O_ID, NO_D_ID, NO_W_ID, NO_KEY)
+                 VALUES (?, ?, ?, ?)
+            </statement>
+            <statement name="stmtInsertOOrderSQL">
+                INSERT INTO OORDER
+                 (O_ID, O_D_ID, O_W_ID, O_C_ID, O_ENTRY_D, O_OL_CNT, O_ALL_LOCAL, O_KEY, O_C_KEY)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            </statement>
+            <statement name="stmtUpdateStockSQL">
+                UPDATE STOCK
+                   SET S_QUANTITY = ? ,
+                       S_YTD = S_YTD + ?,
+                       S_ORDER_CNT = S_ORDER_CNT + 1,
+                       S_REMOTE_CNT = S_REMOTE_CNT + ?
+                 WHERE S_W_I_KEY = ?
+            </statement>
+            <statement name="stmtInsertOrderLineSQL">
+                INSERT INTO ORDER_LINE
+                 (OL_O_ID, OL_D_ID, OL_W_ID, OL_NUMBER, OL_I_ID, OL_SUPPLY_W_ID, OL_QUANTITY, OL_AMOUNT, OL_DIST_INFO, OL_O_KEY, OL_W_I_KEY)
+                 VALUES (?,?,?,?,?,?,?,?,?,?,?)
+            </statement>
+        </procedure>
+        <procedure name="Payment">
+            <statement name="payUpdateDistSQL">
+                UPDATE DISTRICT
+                   SET D_YTD = D_YTD + ?
+                 WHERE D_KEY = ?
+            </statement>
+            <statement name="payGetDistSQL">
+                SELECT D_STREET_1, D_STREET_2, D_CITY, D_STATE, D_ZIP, D_NAME
+                  FROM DISTRICT
+                 WHERE D_KEY = ?
+            </statement>
+            <statement name="payGetCustSQL">
+                SELECT C_FIRST, C_MIDDLE, C_LAST, C_STREET_1, C_STREET_2,
+                       C_CITY, C_STATE, C_ZIP, C_PHONE, C_CREDIT, C_CREDIT_LIM,
+                       C_DISCOUNT, C_BALANCE, C_YTD_PAYMENT, C_PAYMENT_CNT, C_SINCE
+                  FROM CUSTOMER
+                 WHERE C_KEY = ?
+            </statement>
+            <statement name="payGetCustCdataSQL">
+                SELECT C_DATA
+                  FROM CUSTOMER
+                 WHERE C_KEY = ?
+            </statement>
+            <statement name="payUpdateCustBalCdataSQL">
+                UPDATE CUSTOMER
+                   SET C_BALANCE = ?,
+                       C_YTD_PAYMENT = ?,
+                       C_PAYMENT_CNT = ?,
+                       C_DATA = ?
+                 WHERE C_KEY = ?
+            </statement>
+            <statement name="payUpdateCustBalSQL">
+                UPDATE CUSTOMER
+                   SET C_BALANCE = ?,
+                       C_YTD_PAYMENT = ?,
+                       C_PAYMENT_CNT = ?
+                 WHERE C_KEY = ?
+            </statement>
+            <statement name="payInsertHistSQL">
+                INSERT INTO HISTORY
+                 (H_C_D_ID, H_C_W_ID, H_C_ID, H_D_ID, H_W_ID, H_DATE, H_AMOUNT, H_DATA, H_C_KEY)
+                 VALUES (?,?,?,?,?,?,?,?,?)
+            </statement>
+            <statement name="customerByNameSQL">
+                SELECT C_FIRST, C_MIDDLE, C_ID, C_STREET_1, C_STREET_2, C_CITY,
+                       C_STATE, C_ZIP, C_PHONE, C_CREDIT, C_CREDIT_LIM, C_DISCOUNT,
+                       C_BALANCE, C_YTD_PAYMENT, C_PAYMENT_CNT, C_SINCE
+                  FROM CUSTOMER
+                 WHERE C_W_D_LAST_FIRST BETWEEN ? AND ?
+                 ORDER BY C_FIRST
+            </statement>
+        </procedure>
+        <procedure name="OrderStatus">
+            <statement name="payGetCustSQL">
+                SELECT C_FIRST, C_MIDDLE, C_LAST, C_STREET_1, C_STREET_2,
+                       C_CITY, C_STATE, C_ZIP, C_PHONE, C_CREDIT, C_CREDIT_LIM,
+                       C_DISCOUNT, C_BALANCE, C_YTD_PAYMENT, C_PAYMENT_CNT, C_SINCE
+                  FROM CUSTOMER
+                 WHERE C_KEY = ?
+            </statement>
+            <statement name="ordStatGetNewestOrdSQL">
+                SELECT O_ID, O_CARRIER_ID, O_ENTRY_D
+                  FROM OORDER
+                 WHERE O_C_KEY = ?
+                 ORDER BY O_KEY DESC LIMIT 1
+            </statement>
+            <statement name="ordStatGetOrderLinesSQL">
+                SELECT OL_I_ID, OL_SUPPLY_W_ID, OL_QUANTITY, OL_AMOUNT, OL_DELIVERY_D
+                  FROM ORDER_LINE
+                 WHERE OL_O_KEY = ?
+            </statement>
+            <statement name="customerByNameSQL">
+                SELECT C_FIRST, C_MIDDLE, C_ID, C_STREET_1, C_STREET_2, C_CITY,
+                       C_STATE, C_ZIP, C_PHONE, C_CREDIT, C_CREDIT_LIM, C_DISCOUNT,
+                       C_BALANCE, C_YTD_PAYMENT, C_PAYMENT_CNT, C_SINCE
+                  FROM CUSTOMER
+                 WHERE C_W_D_LAST_FIRST BETWEEN ? AND ?
+                 ORDER BY C_FIRST
+            </statement>
+        </procedure>
+        <procedure name="Delivery">
+            <statement name="delivGetOrderIdSQL">
+                SELECT NO_O_ID FROM NEW_ORDER
+                 WHERE NO_KEY BETWEEN ? AND ?
+                 ORDER BY NO_KEY ASC
+                 LIMIT 1
+            </statement>
+            <statement name="delivDeleteNewOrderSQL">
+                DELETE FROM NEW_ORDER
+                WHERE NO_KEY = ?
+            </statement>
+            <statement name="delivGetCustIdSQL">
+                SELECT O_C_ID FROM OORDER
+                WHERE O_KEY = ?
+            </statement>
+            <statement name="delivUpdateCarrierIdSQL">
+                UPDATE OORDER
+                   SET O_CARRIER_ID = ?
+                 WHERE O_KEY = ?
+            </statement>
+            <statement name="delivUpdateDeliveryDateSQL">
+                UPDATE ORDER_LINE
+                   SET OL_DELIVERY_D = ?
+                 WHERE OL_O_KEY = ?
+            </statement>
+            <statement name="delivSumOrderAmountSQL">
+                SELECT SUM(OL_AMOUNT) AS OL_TOTAL
+                  FROM ORDER_LINE
+                 WHERE OL_O_KEY = ?
+            </statement>
+            <statement name="delivUpdateCustBalDelivCntSQL">
+                UPDATE CUSTOMER
+                   SET C_BALANCE = C_BALANCE + ?,
+                       C_DELIVERY_CNT = C_DELIVERY_CNT + 1
+                 WHERE C_KEY = ?
+            </statement>
+        </procedure>
+        <procedure name="StockLevel">
+            <statement name="stockGetDistOrderIdSQL">
+                SELECT D_NEXT_O_ID
+                  FROM DISTRICT
+                 WHERE D_KEY = ?
+            </statement>
+            <statement name="stockGetCountStockSQL">
+                SELECT COUNT(DISTINCT (S_I_ID)) AS STOCK_COUNT
+                  FROM ORDER_LINE, STOCK
+                 WHERE OL_O_KEY &lt; ?
+                   AND OL_O_KEY >= ?
+                   AND OL_W_I_KEY = S_W_I_KEY
+                   AND S_QUANTITY &lt; ?
             </statement>
         </procedure>
     </dialect>
 </dialects>
+

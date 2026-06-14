@@ -25,6 +25,7 @@ import com.oltpbenchmark.benchmarks.tpcc.TPCCWorker;
 import com.oltpbenchmark.benchmarks.tpcc.pojo.Customer;
 import com.oltpbenchmark.benchmarks.tpcc.pojo.District;
 import com.oltpbenchmark.benchmarks.tpcc.pojo.Warehouse;
+import com.oltpbenchmark.types.DatabaseType;
 import java.math.BigDecimal;
 import java.sql.*;
 import java.util.ArrayList;
@@ -175,7 +176,9 @@ public class Payment extends TPCCProcedure {
     int customerDistrictID = getCustomerDistrictId(gen, districtID, x);
     int customerWarehouseID = getCustomerWarehouseID(gen, w_id, numWarehouses, x);
 
-    Customer c = getCustomer(conn, gen, customerDistrictID, customerWarehouseID, paymentAmount);
+    Customer c =
+        getCustomer(
+            conn, gen, customerDistrictID, customerWarehouseID, paymentAmount, numWarehouses);
 
     if (c.c_credit.equals("BC")) {
       // bad credit
@@ -347,7 +350,8 @@ public class Payment extends TPCCProcedure {
       Random gen,
       int customerDistrictID,
       int customerWarehouseID,
-      float paymentAmount)
+      float paymentAmount,
+      int numWarehouses)
       throws SQLException {
     int y = TPCCUtil.randomNumber(1, 100, gen);
 
@@ -360,6 +364,7 @@ public class Payment extends TPCCProcedure {
               customerWarehouseID,
               customerDistrictID,
               TPCCUtil.getNonUniformRandomLastNameForRun(gen),
+              numWarehouses,
               conn);
     } else {
       // 40% lookups by customer ID
@@ -379,8 +384,12 @@ public class Payment extends TPCCProcedure {
       throws SQLException {
     try (PreparedStatement payUpdateDist = this.getPreparedStatement(conn, payUpdateDistSQL)) {
       payUpdateDist.setBigDecimal(1, BigDecimal.valueOf(paymentAmount));
-      payUpdateDist.setInt(2, w_id);
-      payUpdateDist.setInt(3, districtID);
+      if (this.getDbType() == DatabaseType.REGATTA) {
+        payUpdateDist.setLong(2, TPCCUtil.concatDistrictKey(w_id, districtID));
+      } else {
+        payUpdateDist.setInt(2, w_id);
+        payUpdateDist.setInt(3, districtID);
+      }
 
       int result = payUpdateDist.executeUpdate();
 
@@ -392,8 +401,12 @@ public class Payment extends TPCCProcedure {
 
   private District getDistrict(Connection conn, int w_id, int districtID) throws SQLException {
     try (PreparedStatement payGetDist = this.getPreparedStatement(conn, payGetDistSQL)) {
-      payGetDist.setInt(1, w_id);
-      payGetDist.setInt(2, districtID);
+      if (this.getDbType() == DatabaseType.REGATTA) {
+        payGetDist.setLong(1, TPCCUtil.concatDistrictKey(w_id, districtID));
+      } else {
+        payGetDist.setInt(1, w_id);
+        payGetDist.setInt(2, districtID);
+      }
 
       try (ResultSet rs = payGetDist.executeQuery()) {
         if (!rs.next()) {
@@ -425,9 +438,14 @@ public class Payment extends TPCCProcedure {
 
     try (PreparedStatement payGetCustCdata = this.getPreparedStatement(conn, payGetCustCdataSQL)) {
       String c_data;
-      payGetCustCdata.setInt(1, customerWarehouseID);
-      payGetCustCdata.setInt(2, customerDistrictID);
-      payGetCustCdata.setInt(3, c.c_id);
+      if (this.getDbType() == DatabaseType.REGATTA) {
+        payGetCustCdata.setLong(
+            1, TPCCUtil.concatCustomerKey(customerWarehouseID, customerDistrictID, c.c_id));
+      } else {
+        payGetCustCdata.setInt(1, customerWarehouseID);
+        payGetCustCdata.setInt(2, customerDistrictID);
+        payGetCustCdata.setInt(3, c.c_id);
+      }
       try (ResultSet rs = payGetCustCdata.executeQuery()) {
         if (!rs.next()) {
           throw new RuntimeException(
@@ -473,9 +491,14 @@ public class Payment extends TPCCProcedure {
       payUpdateCustBalCdata.setDouble(2, c.c_ytd_payment);
       payUpdateCustBalCdata.setInt(3, c.c_payment_cnt);
       payUpdateCustBalCdata.setString(4, c.c_data);
-      payUpdateCustBalCdata.setInt(5, customerWarehouseID);
-      payUpdateCustBalCdata.setInt(6, customerDistrictID);
-      payUpdateCustBalCdata.setInt(7, c.c_id);
+      if (this.getDbType() == DatabaseType.REGATTA) {
+        payUpdateCustBalCdata.setLong(
+            5, TPCCUtil.concatCustomerKey(customerWarehouseID, customerDistrictID, c.c_id));
+      } else {
+        payUpdateCustBalCdata.setInt(5, customerWarehouseID);
+        payUpdateCustBalCdata.setInt(6, customerDistrictID);
+        payUpdateCustBalCdata.setInt(7, c.c_id);
+      }
 
       int result = payUpdateCustBalCdata.executeUpdate();
 
@@ -500,9 +523,14 @@ public class Payment extends TPCCProcedure {
       payUpdateCustBal.setDouble(1, c.c_balance);
       payUpdateCustBal.setDouble(2, c.c_ytd_payment);
       payUpdateCustBal.setInt(3, c.c_payment_cnt);
-      payUpdateCustBal.setInt(4, customerWarehouseID);
-      payUpdateCustBal.setInt(5, customerDistrictID);
-      payUpdateCustBal.setInt(6, c.c_id);
+      if (this.getDbType() == DatabaseType.REGATTA) {
+        payUpdateCustBal.setLong(
+            4, TPCCUtil.concatCustomerKey(customerWarehouseID, customerDistrictID, c.c_id));
+      } else {
+        payUpdateCustBal.setInt(4, customerWarehouseID);
+        payUpdateCustBal.setInt(5, customerDistrictID);
+        payUpdateCustBal.setInt(6, c.c_id);
+      }
 
       int result = payUpdateCustBal.executeUpdate();
 
@@ -547,6 +575,10 @@ public class Payment extends TPCCProcedure {
       payInsertHist.setTimestamp(6, new Timestamp(System.currentTimeMillis()));
       payInsertHist.setDouble(7, paymentAmount);
       payInsertHist.setString(8, h_data);
+      if (this.getDbType() == DatabaseType.REGATTA) {
+        payInsertHist.setLong(
+            9, TPCCUtil.concatCustomerKey(customerWarehouseID, customerDistrictID, c.c_id));
+      }
       payInsertHist.executeUpdate();
     }
   }
@@ -558,9 +590,13 @@ public class Payment extends TPCCProcedure {
 
     try (PreparedStatement payGetCust = this.getPreparedStatement(conn, payGetCustSQL)) {
 
-      payGetCust.setInt(1, c_w_id);
-      payGetCust.setInt(2, c_d_id);
-      payGetCust.setInt(3, c_id);
+      if (this.getDbType() == DatabaseType.REGATTA) {
+        payGetCust.setLong(1, TPCCUtil.concatCustomerKey(c_w_id, c_d_id, c_id));
+      } else {
+        payGetCust.setInt(1, c_w_id);
+        payGetCust.setInt(2, c_d_id);
+        payGetCust.setInt(3, c_id);
+      }
 
       try (ResultSet rs = payGetCust.executeQuery()) {
         if (!rs.next()) {
@@ -579,14 +615,26 @@ public class Payment extends TPCCProcedure {
   // attention this code is repeated in other transacitons... ok for now to
   // allow for separate statements.
   public Customer getCustomerByName(
-      int c_w_id, int c_d_id, String customerLastName, Connection conn) throws SQLException {
+      int c_w_id, int c_d_id, String customerLastName, int numWarehouses, Connection conn)
+      throws SQLException {
     ArrayList<Customer> customers = new ArrayList<>();
 
     try (PreparedStatement customerByName = this.getPreparedStatement(conn, customerByNameSQL)) {
-
-      customerByName.setInt(1, c_w_id);
-      customerByName.setInt(2, c_d_id);
-      customerByName.setString(3, customerLastName);
+      if (this.getDbType() == DatabaseType.REGATTA) {
+        int maxWarehouseDigits = Integer.toString(Math.max(numWarehouses, 1)).length();
+        customerByName.setString(
+            1,
+            TPCCUtil.customerNameLookupLowerBound(
+                c_w_id, c_d_id, customerLastName, maxWarehouseDigits));
+        customerByName.setString(
+            2,
+            TPCCUtil.customerNameLookupUpperBound(
+                c_w_id, c_d_id, customerLastName, maxWarehouseDigits));
+      } else {
+        customerByName.setInt(1, c_w_id);
+        customerByName.setInt(2, c_d_id);
+        customerByName.setString(3, customerLastName);
+      }
       try (ResultSet rs = customerByName.executeQuery()) {
         if (LOG.isTraceEnabled()) {
           LOG.trace("C_LAST={} C_D_ID={} C_W_ID={}", customerLastName, c_d_id, c_w_id);
