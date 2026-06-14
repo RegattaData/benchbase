@@ -295,7 +295,7 @@ public final class TPCCLoader extends Loader<TPCCBenchmark> {
         stockPreparedStatement.setString(idx++, TPCCUtil.randomStr(24));
         stockPreparedStatement.setString(idx++, TPCCUtil.randomStr(24));
         if (this.getDatabaseType() == DatabaseType.REGATTA) {
-          stockPreparedStatement.setLong(idx, TPCCUtil.concatWarehouseItemKey(w_id, i));
+          stockPreparedStatement.setLong(idx++, TPCCUtil.concatWarehouseItemKey(w_id, i));
         }
         stockPreparedStatement.addBatch();
 
@@ -350,7 +350,7 @@ public final class TPCCLoader extends Loader<TPCCBenchmark> {
         distPrepStmt.setString(idx++, district.d_state);
         distPrepStmt.setString(idx++, district.d_zip);
         if (this.getDatabaseType() == DatabaseType.REGATTA) {
-          distPrepStmt.setLong(idx, TPCCUtil.concatDistrictKey(w_id, d));
+          distPrepStmt.setLong(idx++, TPCCUtil.concatDistrictKey(w_id, d));
         }
         distPrepStmt.executeUpdate();
       }
@@ -438,7 +438,7 @@ public final class TPCCLoader extends Loader<TPCCBenchmark> {
           if (this.getDatabaseType() == DatabaseType.REGATTA) {
             custPrepStmt.setLong(idx++, TPCCUtil.concatCustomerKey(w_id, d, c));
             custPrepStmt.setString(
-                idx,
+                idx++,
                 TPCCUtil.concatCustomerLastFirstKey(
                     w_id, d, customer.c_last, customer.c_first, getMaxWarehouseDigits()));
           }
@@ -493,7 +493,7 @@ public final class TPCCLoader extends Loader<TPCCBenchmark> {
           histPrepStmt.setDouble(idx++, history.h_amount);
           histPrepStmt.setString(idx++, history.h_data);
           if (this.getDatabaseType() == DatabaseType.REGATTA) {
-            histPrepStmt.setLong(idx, TPCCUtil.concatCustomerKey(w_id, d, c));
+            histPrepStmt.setLong(idx++, TPCCUtil.concatCustomerKey(w_id, d, c));
           }
           histPrepStmt.addBatch();
 
@@ -572,7 +572,7 @@ public final class TPCCLoader extends Loader<TPCCBenchmark> {
           openOrderStatement.setTimestamp(idx++, oorder.o_entry_d);
           if (this.getDatabaseType() == DatabaseType.REGATTA) {
             openOrderStatement.setLong(idx++, TPCCUtil.concatOrderKey(w_id, d, oorder.o_id));
-            openOrderStatement.setLong(idx, TPCCUtil.concatCustomerKey(w_id, d, oorder.o_c_id));
+            openOrderStatement.setLong(idx++, TPCCUtil.concatCustomerKey(w_id, d, oorder.o_c_id));
           }
           openOrderStatement.addBatch();
 
@@ -630,7 +630,7 @@ public final class TPCCLoader extends Loader<TPCCBenchmark> {
             newOrderStatement.setInt(idx++, new_order.no_d_id);
             newOrderStatement.setInt(idx++, new_order.no_o_id);
             if (this.getDatabaseType() == DatabaseType.REGATTA) {
-              newOrderStatement.setLong(idx, TPCCUtil.concatOrderKey(w_id, d, c));
+              newOrderStatement.setLong(idx++, TPCCUtil.concatOrderKey(w_id, d, c));
             }
             newOrderStatement.addBatch();
 
@@ -705,7 +705,7 @@ public final class TPCCLoader extends Loader<TPCCBenchmark> {
             if (this.getDatabaseType() == DatabaseType.REGATTA) {
               orderLineStatement.setLong(idx++, TPCCUtil.concatOrderKey(w_id, d, c));
               orderLineStatement.setLong(
-                  idx,
+                  idx++,
                   TPCCUtil.concatWarehouseItemKey(order_line.ol_supply_w_id, order_line.ol_i_id));
             }
             orderLineStatement.addBatch();

@@ -37,8 +37,9 @@ public class Delivery extends TPCCProcedure {
       new SQLStmt(
           """
             SELECT NO_O_ID FROM %s
-             WHERE NO_KEY BETWEEN ? AND ?
-             ORDER BY NO_KEY ASC
+             WHERE NO_D_ID = ?
+               AND NO_W_ID = ?
+             ORDER BY NO_O_ID ASC
              LIMIT 1
         """
               .formatted(TPCCConstants.TABLENAME_NEWORDER));
@@ -47,7 +48,9 @@ public class Delivery extends TPCCProcedure {
       new SQLStmt(
           """
             DELETE FROM %s
-        WHERE NO_KEY = ?
+            WHERE NO_O_ID = ?
+            AND NO_D_ID = ?
+            AND NO_W_ID = ?
         """
               .formatted(TPCCConstants.TABLENAME_NEWORDER));
 
@@ -55,7 +58,9 @@ public class Delivery extends TPCCProcedure {
       new SQLStmt(
           """
             SELECT O_C_ID FROM %s
-        WHERE O_KEY = ?
+            WHERE O_ID = ?
+            AND O_D_ID = ?
+            AND O_W_ID = ?
         """
               .formatted(TPCCConstants.TABLENAME_OPENORDER));
 
@@ -64,7 +69,9 @@ public class Delivery extends TPCCProcedure {
           """
         UPDATE %s
            SET O_CARRIER_ID = ?
-         WHERE O_KEY = ?
+         WHERE O_ID = ?
+           AND O_D_ID = ?
+           AND O_W_ID = ?
     """
               .formatted(TPCCConstants.TABLENAME_OPENORDER));
 
@@ -73,7 +80,9 @@ public class Delivery extends TPCCProcedure {
           """
         UPDATE %s
            SET OL_DELIVERY_D = ?
-         WHERE OL_O_KEY = ?
+         WHERE OL_O_ID = ?
+           AND OL_D_ID = ?
+           AND OL_W_ID = ?
     """
               .formatted(TPCCConstants.TABLENAME_ORDERLINE));
 
@@ -82,7 +91,9 @@ public class Delivery extends TPCCProcedure {
           """
         SELECT SUM(OL_AMOUNT) AS OL_TOTAL
           FROM %s
-         WHERE OL_O_KEY = ?
+         WHERE OL_O_ID = ?
+           AND OL_D_ID = ?
+           AND OL_W_ID = ?
     """
               .formatted(TPCCConstants.TABLENAME_ORDERLINE));
 
@@ -92,7 +103,9 @@ public class Delivery extends TPCCProcedure {
         UPDATE %s
            SET C_BALANCE = C_BALANCE + ?,
                C_DELIVERY_CNT = C_DELIVERY_CNT + 1
-         WHERE C_KEY = ?
+         WHERE C_W_ID = ?
+           AND C_D_ID = ?
+           AND C_ID = ?
     """
               .formatted(TPCCConstants.TABLENAME_CUSTOMER));
 
