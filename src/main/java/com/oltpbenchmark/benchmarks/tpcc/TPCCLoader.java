@@ -301,14 +301,17 @@ public final class TPCCLoader extends Loader<TPCCBenchmark> {
 
         k++;
 
-        if (k != 0 && (k % workConf.getBatchSize()) == 0) {
+        if (k >= workConf.getBatchSize()) {
           stockPreparedStatement.executeBatch();
           stockPreparedStatement.clearBatch();
+          k = 0;
         }
       }
 
-      stockPreparedStatement.executeBatch();
-      stockPreparedStatement.clearBatch();
+      if (k > 0) {
+        stockPreparedStatement.executeBatch();
+        stockPreparedStatement.clearBatch();
+      }
 
     } catch (SQLException se) {
       LOG.error(se.getMessage());
@@ -446,15 +449,18 @@ public final class TPCCLoader extends Loader<TPCCBenchmark> {
 
           k++;
 
-          if (k != 0 && (k % workConf.getBatchSize()) == 0) {
+          if (k >= workConf.getBatchSize()) {
             custPrepStmt.executeBatch();
             custPrepStmt.clearBatch();
+            k = 0;
           }
         }
       }
 
-      custPrepStmt.executeBatch();
-      custPrepStmt.clearBatch();
+      if (k > 0) {
+        custPrepStmt.executeBatch();
+        custPrepStmt.clearBatch();
+      }
 
     } catch (SQLException se) {
       LOG.error(se.getMessage());
@@ -499,15 +505,18 @@ public final class TPCCLoader extends Loader<TPCCBenchmark> {
 
           k++;
 
-          if (k != 0 && (k % workConf.getBatchSize()) == 0) {
+          if (k >= workConf.getBatchSize()) {
             histPrepStmt.executeBatch();
             histPrepStmt.clearBatch();
+            k = 0;
           }
         }
       }
 
-      histPrepStmt.executeBatch();
-      histPrepStmt.clearBatch();
+      if (k > 0) {
+        histPrepStmt.executeBatch();
+        histPrepStmt.clearBatch();
+      }
 
     } catch (SQLException se) {
       LOG.error(se.getMessage());
@@ -578,15 +587,18 @@ public final class TPCCLoader extends Loader<TPCCBenchmark> {
 
           k++;
 
-          if (k != 0 && (k % workConf.getBatchSize()) == 0) {
+          if (k >= workConf.getBatchSize()) {
             openOrderStatement.executeBatch();
             openOrderStatement.clearBatch();
+            k = 0;
           }
         }
       }
 
-      openOrderStatement.executeBatch();
-      openOrderStatement.clearBatch();
+      if (k > 0) {
+        openOrderStatement.executeBatch();
+        openOrderStatement.clearBatch();
+      }
 
     } catch (SQLException se) {
       LOG.error(se.getMessage(), se);
@@ -635,17 +647,20 @@ public final class TPCCLoader extends Loader<TPCCBenchmark> {
             newOrderStatement.addBatch();
 
             k++;
-          }
 
-          if (k != 0 && (k % workConf.getBatchSize()) == 0) {
-            newOrderStatement.executeBatch();
-            newOrderStatement.clearBatch();
+            if (k >= workConf.getBatchSize()) {
+              newOrderStatement.executeBatch();
+              newOrderStatement.clearBatch();
+              k = 0;
+            }
           }
         }
       }
 
-      newOrderStatement.executeBatch();
-      newOrderStatement.clearBatch();
+      if (k > 0) {
+        newOrderStatement.executeBatch();
+        newOrderStatement.clearBatch();
+      }
 
     } catch (SQLException se) {
       LOG.error(se.getMessage(), se);
@@ -712,16 +727,19 @@ public final class TPCCLoader extends Loader<TPCCBenchmark> {
 
             k++;
 
-            if (k != 0 && (k % workConf.getBatchSize()) == 0) {
+            if (k >= workConf.getBatchSize()) {
               orderLineStatement.executeBatch();
               orderLineStatement.clearBatch();
+              k = 0;
             }
           }
         }
       }
 
-      orderLineStatement.executeBatch();
-      orderLineStatement.clearBatch();
+      if (k > 0) {
+        orderLineStatement.executeBatch();
+        orderLineStatement.clearBatch();
+      }
 
     } catch (SQLException se) {
       LOG.error(se.getMessage(), se);
