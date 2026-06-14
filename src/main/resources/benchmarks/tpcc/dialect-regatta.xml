@@ -2,6 +2,7 @@
 <dialects>
     <dialect type="REGATTA">
         <procedure name="NewOrder">
+
             <statement name="stmtGetCustSQL">
                 SELECT C_DISCOUNT, C_LAST, C_CREDIT
                   FROM CUSTOMER
@@ -11,6 +12,7 @@
                 SELECT D_NEXT_O_ID, D_TAX
                   FROM DISTRICT
                  WHERE D_KEY = ?
+
             </statement>
             <statement name="stmtGetStockSQL">
                 SELECT S_QUANTITY, S_DATA, S_DIST_01, S_DIST_02, S_DIST_03, S_DIST_04, S_DIST_05,
@@ -181,3 +183,4 @@
         </procedure>
     </dialect>
 </dialects>
+

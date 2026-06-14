@@ -19,13 +19,21 @@ BenchBase (formerly [OLTPBench](https://github.com/oltpbenchmark/oltpbench/)) is
 ## Requirements
 The Regatta JDBC driver must be installed before running workloads on the Regatta DB.
 For installation guidelines please refer to https://docs.regatta.dev/drivers-and-clients/java/install-your-java-client.
+Note that the default version used is `26.0.0` and it should be updated if needed.
 
 ## Quickstart
 
-To clone and build BenchBase using the `regatta` profile,
+Clone BenchBase,
 
 ```bash
 git clone --depth 1 https://github.com/RegattaData/benchbase.git
+```
+
+Configure the connection URL in `config/regatta/sample_tpcc_config.xml` and in `sample_chbenchmark_config.xml` for the TPC-C and CH benchmarks.
+
+Build BenchBase using the `regatta` profile,
+
+```
 cd benchbase
 ./mvnw clean package -P regatta
 ```
