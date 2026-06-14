@@ -47,11 +47,9 @@
                 SELECT o.o_ol_cnt, COUNT(*) AS order_count
                 FROM oorder o
                 LEFT JOIN order_line ol
-                ON  o.o_id    = ol.ol_o_id
-                AND o.o_w_id  = ol.ol_w_id
-                AND o.o_d_id  = ol.ol_d_id
+                ON  o.o_key = ol.ol_o_key
                 AND ol.ol_delivery_d &gt;= o.o_entry_d
-                WHERE ol.ol_o_id IS NOT NULL
+                WHERE ol.ol_o_key IS NOT NULL
                 GROUP BY o.o_ol_cnt
                 ORDER BY o.o_ol_cnt
             </statement>
@@ -69,8 +67,7 @@
                     region
                 WHERE c_key = o_c_key
                 AND ol_o_key = o_key
-                AND ol_w_id = s_w_id
-                AND ol_i_id = s_i_id
+                AND ol_w_i_key = s_w_i_key
                 AND MOD((s_w_id * s_i_id), 10000) = su_suppkey
                 AND c_state_key = su_nationkey
                 AND su_nationkey = n_nationkey
@@ -96,12 +93,8 @@
                     nation n2
                 WHERE ol_w_i_key = s_w_i_key
                 AND MOD((s_w_id * s_i_id), 10000) = su_suppkey
-                AND ol_w_id = o_w_id
-                AND ol_d_id = o_d_id
-                AND ol_o_id = o_id
-                AND c_id = o_c_id
-                AND c_w_id = o_w_id
-                AND c_d_id = o_d_id
+                AND ol_o_key = o_key
+                AND c_key = o_c_key
                 AND su_nationkey = n1.n_nationkey
                 AND c_state_key = n2.n_nationkey
                 AND ((n1.n_name = 'Germany' AND n2.n_name = 'Cambodia')
@@ -130,12 +123,8 @@
                 WHERE i_id = s_i_id
                 AND ol_w_i_key = s_w_i_key
                 AND MOD((s_w_id * s_i_id), 10000) = su_suppkey
-                AND ol_w_id = o_w_id
-                AND ol_d_id = o_d_id
-                AND ol_o_id = o_id
-                AND c_id = o_c_id
-                AND c_w_id = o_w_id
-                AND c_d_id = o_d_id
+                AND ol_o_key = o_key
+                AND c_key = o_c_key
                 AND n1.n_nationkey = c_state_key
                 AND n1.n_regionkey = r_regionkey
                 AND ol_i_id &lt; 1000
@@ -175,12 +164,8 @@
                     oorder,
                     order_line,
                     nation
-                WHERE c_id = o_c_id
-                AND c_w_id = o_w_id
-                AND c_d_id = o_d_id
-                AND ol_w_id = o_w_id
-                AND ol_d_id = o_d_id
-                AND ol_o_id = o_id
+                WHERE c_key = o_c_key
+                AND ol_o_key = o_key
                 AND o_entry_d &gt;= '2007-01-02 00:00:00.000000'
                 AND o_entry_d &lt;= ol_delivery_d
                 AND n_nationkey = c_state_key
@@ -290,6 +275,21 @@
                 ORDER BY amount_sum DESC, o_entry_d
             </statement>
         </procedure>
+        <procedure name="Q19">
+            <statement name="query_stmt">
+                SELECT SUM(ol_amount) AS revenue
+                FROM order_line
+                JOIN item ON ol_i_id = i_id
+                WHERE ol_quantity &gt;= 1
+                  AND ol_quantity &lt;= 10
+                  AND i_price BETWEEN 1 AND 400000
+                  AND (
+                      (i_data LIKE '%a' AND ol_w_id IN (1, 2, 3))
+                   OR (i_data LIKE '%b' AND ol_w_id IN (1, 2, 4))
+                   OR (i_data LIKE '%c' AND ol_w_id IN (1, 5, 3))
+                  )
+            </statement>
+        </procedure>
         <procedure name="Q21">
             <statement name="query_stmt">
                 SELECT su_name, COUNT(*) AS numwait
@@ -300,19 +300,14 @@
                 JOIN stock
                 ON mod((s_w_id * s_i_id), 10000) = su_suppkey
                 JOIN order_line l1
-                ON l1.ol_w_id = s_w_id
-                AND l1.ol_i_id = s_i_id
+                ON l1.ol_w_i_key = s_w_i_key
                 JOIN oorder
-                ON l1.ol_o_id = o_id
-                AND l1.ol_w_id = o_w_id
-                AND l1.ol_d_id = o_d_id
+                ON l1.ol_o_key = o_key
                 AND l1.ol_delivery_d &gt; o_entry_d
                 LEFT JOIN order_line l2
-                ON l2.ol_o_id = l1.ol_o_id
-                AND l2.ol_w_id = l1.ol_w_id
-                AND l2.ol_d_id = l1.ol_d_id
+                ON l2.ol_o_key = l1.ol_o_key
                 AND l2.ol_delivery_d &gt; l1.ol_delivery_d
-                WHERE l2.ol_o_id IS NULL
+                WHERE l2.ol_o_key IS NULL
                 GROUP BY su_name
                 ORDER BY numwait DESC, su_name
             </statement>
@@ -331,12 +326,10 @@
                 FROM customer
                 CROSS JOIN avg_balance
                 LEFT JOIN oorder
-                ON o_c_id = c_id
-                AND o_w_id = c_w_id
-                AND o_d_id = c_d_id
+                ON o_c_key = c_key
                 WHERE SUBSTRING(c_phone FROM 1 FOR 1) IN ('1','2','3','4','5','6','7')
                 AND c_balance &gt; avg_balance.threshold
-                AND o_c_id IS NULL
+                AND o_c_key IS NULL
                 GROUP BY SUBSTRING(c_state FROM 1 FOR 1)
                 ORDER BY SUBSTRING(c_state FROM 1 FOR 1)
             </statement>

@@ -8,7 +8,7 @@
     <username>admin</username>
     <password>RegattaDefault1234!</password>
     <reconnectOnConnectionFailure>true</reconnectOnConnectionFailure>
-    <isolation>TRANSACTION_SERIALIZABLE</isolation>
+    <isolation>TRANSACTION_REPEATABLE_READ</isolation>
     <batchsize>32</batchsize>
 
     <!-- Scale factor is the number of warehouses in TPCC -->
@@ -27,7 +27,7 @@
             <time>600</time>
 
             <!-- Note: The rate can be set to UNLIMITED or DISABLED -->
-            <rate>20000</rate>
+            <rate>200</rate>
 
             <!-- Need to Specify transaction weights for each workload .. Otherwise the number of fields won't match -->
             <weights bench="tpcc">45,43,4,4,4</weights>
