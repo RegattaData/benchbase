@@ -17,14 +17,19 @@
                     SELECT s_i_id AS m_i_id, MIN(s_quantity) AS m_s_quantity
                     FROM europe_stock
                     GROUP BY s_i_id
+                ),
+                best_stock AS (
+                    SELECT es.su_suppkey, es.su_name, es.su_address, es.su_phone,
+                           es.su_comment, es.n_name, es.s_i_id
+                    FROM europe_stock es
+                    JOIN min_qty ON es.s_i_id = m_i_id
+                               AND es.s_quantity = m_s_quantity
                 )
                 SELECT su_suppkey, su_name, n_name, i_id, i_name,
                        su_address, su_phone, su_comment
-                FROM item, europe_stock, min_qty
-                WHERE i_id = europe_stock.s_i_id
+                FROM item, best_stock
+                WHERE i_id = best_stock.s_i_id
                   AND i_data LIKE '%b'
-                  AND i_id = m_i_id
-                  AND europe_stock.s_quantity = m_s_quantity
                 ORDER BY n_name, su_name, i_id
             </statement>
         </procedure>
