@@ -1,6 +1,6 @@
 -- Tables are dropped (if needed) in BenchmarkModule.java before loading the DDL.
 CREATE TABLE warehouse (
-    w_id       INT              NOT NULL INDEX,
+    w_id       INT              NOT NULL UNIQUE INDEX,
     w_ytd      NUMERIC(12, 2)   NOT NULL,
     w_tax      NUMERIC(4, 4)    NOT NULL,
     w_name     VARCHAR(10)      NOT NULL,
@@ -12,7 +12,7 @@ CREATE TABLE warehouse (
 );
 
 CREATE TABLE item (
-    i_id    INT            NOT NULL INDEX,
+    i_id    INT            NOT NULL UNIQUE INDEX,
     i_name  VARCHAR(24)    NOT NULL,
     i_price NUMERIC(5, 2)  NOT NULL,
     i_data  VARCHAR(50)    NOT NULL,
@@ -37,7 +37,7 @@ CREATE TABLE stock (
     s_dist_08    CHAR(24)       NOT NULL,
     s_dist_09    CHAR(24)       NOT NULL,
     s_dist_10    CHAR(24)       NOT NULL,
-    s_w_i_key    BIGINT         NOT NULL INDEX
+    s_w_i_key    BIGINT         NOT NULL UNIQUE INDEX
 );
 
 CREATE TABLE district (
@@ -52,7 +52,7 @@ CREATE TABLE district (
     d_city      VARCHAR(20)     NOT NULL,
     d_state     CHAR(2)         NOT NULL,
     d_zip       CHAR(9)         NOT NULL,
-    d_key       BIGINT          NOT NULL INDEX
+    d_key       BIGINT          NOT NULL UNIQUE INDEX
 );
 
 CREATE TABLE customer (
@@ -78,7 +78,7 @@ CREATE TABLE customer (
     c_since        TIMESTAMP       NOT NULL DEFAULT CURRENT_TIMESTAMP,
     c_middle       CHAR(2)         NOT NULL,
     c_data         VARCHAR(500)    NOT NULL,
-    c_key          BIGINT          NOT NULL INDEX,
+    c_key          BIGINT          NOT NULL UNIQUE INDEX,
     c_w_d_last_first VARCHAR(64)   NOT NULL INDEX
 );
 
@@ -103,7 +103,7 @@ CREATE TABLE oorder (
     o_ol_cnt     INT       NOT NULL,
     o_all_local  INT       NOT NULL,
     o_entry_d    TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    o_key        BIGINT    NOT NULL INDEX,
+    o_key        BIGINT    NOT NULL UNIQUE INDEX,
     o_c_key      BIGINT    NOT NULL INDEX
 );
 
@@ -111,7 +111,7 @@ CREATE TABLE new_order (
     no_w_id INT NOT NULL,
     no_d_id INT NOT NULL,
     no_o_id INT NOT NULL,
-    no_key  BIGINT NOT NULL INDEX
+    no_key  BIGINT NOT NULL UNIQUE INDEX
 );
 
 CREATE TABLE order_line (

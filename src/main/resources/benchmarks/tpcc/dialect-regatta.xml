@@ -4,24 +4,24 @@
         <procedure name="NewOrder">
 
             <statement name="stmtGetCustSQL">
-                SELECT C_DISCOUNT, C_LAST, C_CREDIT
+                SELECT /*++ INDEX(CUSTOMER, COLUMN C_KEY)*/ C_DISCOUNT, C_LAST, C_CREDIT
                   FROM CUSTOMER
                  WHERE C_KEY = ?
             </statement>
             <statement name="stmtGetDistSQL">
-                SELECT D_NEXT_O_ID, D_TAX
+                SELECT /*++ INDEX(DISTRICT, COLUMN D_KEY)*/ D_NEXT_O_ID, D_TAX
                   FROM DISTRICT
                  WHERE D_KEY = ?
 
             </statement>
             <statement name="stmtGetStockSQL">
-                SELECT S_QUANTITY, S_DATA, S_DIST_01, S_DIST_02, S_DIST_03, S_DIST_04, S_DIST_05,
+                SELECT /*++ INDEX(STOCK, COLUMN S_W_I_KEY)*/ S_QUANTITY, S_DATA, S_DIST_01, S_DIST_02, S_DIST_03, S_DIST_04, S_DIST_05,
                        S_DIST_06, S_DIST_07, S_DIST_08, S_DIST_09, S_DIST_10
                   FROM STOCK
                  WHERE S_W_I_KEY = ?
             </statement>
             <statement name="stmtUpdateDistSQL">
-                UPDATE DISTRICT
+                UPDATE /*++ INDEX(DISTRICT, COLUMN D_KEY)*/ DISTRICT
                    SET D_NEXT_O_ID = D_NEXT_O_ID + 1
                  WHERE D_KEY = ?
             </statement>
@@ -36,7 +36,7 @@
                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             </statement>
             <statement name="stmtUpdateStockSQL">
-                UPDATE STOCK
+                UPDATE /*++ INDEX(STOCK, COLUMN S_W_I_KEY)*/ STOCK
                    SET S_QUANTITY = ? ,
                        S_YTD = S_YTD + ?,
                        S_ORDER_CNT = S_ORDER_CNT + 1,
@@ -51,29 +51,29 @@
         </procedure>
         <procedure name="Payment">
             <statement name="payUpdateDistSQL">
-                UPDATE DISTRICT
+                UPDATE /*++ INDEX(DISTRICT, COLUMN D_KEY)*/ DISTRICT
                    SET D_YTD = D_YTD + ?
                  WHERE D_KEY = ?
             </statement>
             <statement name="payGetDistSQL">
-                SELECT D_STREET_1, D_STREET_2, D_CITY, D_STATE, D_ZIP, D_NAME
+                SELECT /*++ INDEX(DISTRICT, COLUMN D_KEY)*/ D_STREET_1, D_STREET_2, D_CITY, D_STATE, D_ZIP, D_NAME
                   FROM DISTRICT
                  WHERE D_KEY = ?
             </statement>
             <statement name="payGetCustSQL">
-                SELECT C_FIRST, C_MIDDLE, C_LAST, C_STREET_1, C_STREET_2,
+                SELECT /*++ INDEX(CUSTOMER, COLUMN C_KEY)*/ C_FIRST, C_MIDDLE, C_LAST, C_STREET_1, C_STREET_2,
                        C_CITY, C_STATE, C_ZIP, C_PHONE, C_CREDIT, C_CREDIT_LIM,
                        C_DISCOUNT, C_BALANCE, C_YTD_PAYMENT, C_PAYMENT_CNT, C_SINCE
                   FROM CUSTOMER
                  WHERE C_KEY = ?
             </statement>
             <statement name="payGetCustCdataSQL">
-                SELECT C_DATA
+                SELECT /*++ INDEX(CUSTOMER, COLUMN C_KEY)*/ C_DATA
                   FROM CUSTOMER
                  WHERE C_KEY = ?
             </statement>
             <statement name="payUpdateCustBalCdataSQL">
-                UPDATE CUSTOMER
+                UPDATE /*++ INDEX(CUSTOMER, COLUMN C_KEY)*/ CUSTOMER
                    SET C_BALANCE = ?,
                        C_YTD_PAYMENT = ?,
                        C_PAYMENT_CNT = ?,
@@ -81,7 +81,7 @@
                  WHERE C_KEY = ?
             </statement>
             <statement name="payUpdateCustBalSQL">
-                UPDATE CUSTOMER
+                UPDATE /*++ INDEX(CUSTOMER, COLUMN C_KEY)*/ CUSTOMER
                    SET C_BALANCE = ?,
                        C_YTD_PAYMENT = ?,
                        C_PAYMENT_CNT = ?
@@ -93,7 +93,7 @@
                  VALUES (?,?,?,?,?,?,?,?,?)
             </statement>
             <statement name="customerByNameSQL">
-                SELECT C_FIRST, C_MIDDLE, C_ID, C_STREET_1, C_STREET_2, C_CITY,
+                SELECT /*++ INDEX(CUSTOMER, COLUMN C_W_D_LAST_FIRST)*/ C_FIRST, C_MIDDLE, C_ID, C_STREET_1, C_STREET_2, C_CITY,
                        C_STATE, C_ZIP, C_PHONE, C_CREDIT, C_CREDIT_LIM, C_DISCOUNT,
                        C_BALANCE, C_YTD_PAYMENT, C_PAYMENT_CNT, C_SINCE
                   FROM CUSTOMER
@@ -103,25 +103,25 @@
         </procedure>
         <procedure name="OrderStatus">
             <statement name="payGetCustSQL">
-                SELECT C_FIRST, C_MIDDLE, C_LAST, C_STREET_1, C_STREET_2,
+                SELECT /*++ INDEX(CUSTOMER, COLUMN C_KEY)*/ C_FIRST, C_MIDDLE, C_LAST, C_STREET_1, C_STREET_2,
                        C_CITY, C_STATE, C_ZIP, C_PHONE, C_CREDIT, C_CREDIT_LIM,
                        C_DISCOUNT, C_BALANCE, C_YTD_PAYMENT, C_PAYMENT_CNT, C_SINCE
                   FROM CUSTOMER
                  WHERE C_KEY = ?
             </statement>
             <statement name="ordStatGetNewestOrdSQL">
-                SELECT O_ID, O_CARRIER_ID, O_ENTRY_D
+                SELECT /*++ INDEX(OORDER, COLUMN O_C_KEY)*/ O_ID, O_CARRIER_ID, O_ENTRY_D
                   FROM OORDER
                  WHERE O_C_KEY = ?
                  ORDER BY O_KEY DESC LIMIT 1
             </statement>
             <statement name="ordStatGetOrderLinesSQL">
-                SELECT OL_I_ID, OL_SUPPLY_W_ID, OL_QUANTITY, OL_AMOUNT, OL_DELIVERY_D
+                SELECT /*++ INDEX(ORDER_LINE, COLUMN OL_O_KEY)*/ OL_I_ID, OL_SUPPLY_W_ID, OL_QUANTITY, OL_AMOUNT, OL_DELIVERY_D
                   FROM ORDER_LINE
                  WHERE OL_O_KEY = ?
             </statement>
             <statement name="customerByNameSQL">
-                SELECT C_FIRST, C_MIDDLE, C_ID, C_STREET_1, C_STREET_2, C_CITY,
+                SELECT /*++ INDEX(CUSTOMER, COLUMN C_W_D_LAST_FIRST)*/ C_FIRST, C_MIDDLE, C_ID, C_STREET_1, C_STREET_2, C_CITY,
                        C_STATE, C_ZIP, C_PHONE, C_CREDIT, C_CREDIT_LIM, C_DISCOUNT,
                        C_BALANCE, C_YTD_PAYMENT, C_PAYMENT_CNT, C_SINCE
                   FROM CUSTOMER
@@ -131,36 +131,36 @@
         </procedure>
         <procedure name="Delivery">
             <statement name="delivGetOrderIdSQL">
-                SELECT NO_O_ID FROM NEW_ORDER
+                SELECT /*++ INDEX(NEW_ORDER, COLUMN NO_KEY)*/ NO_O_ID FROM NEW_ORDER
                  WHERE NO_KEY BETWEEN ? AND ?
                  ORDER BY NO_KEY ASC
                  LIMIT 1
             </statement>
             <statement name="delivDeleteNewOrderSQL">
-                DELETE FROM NEW_ORDER
+                DELETE /*++ INDEX(NEW_ORDER, COLUMN NO_KEY)*/ FROM NEW_ORDER
                 WHERE NO_KEY = ?
             </statement>
             <statement name="delivGetCustIdSQL">
-                SELECT O_C_ID FROM OORDER
+                SELECT /*++ INDEX(OORDER, COLUMN O_KEY)*/ O_C_ID FROM OORDER
                 WHERE O_KEY = ?
             </statement>
             <statement name="delivUpdateCarrierIdSQL">
-                UPDATE OORDER
+                UPDATE /*++ INDEX(OORDER, COLUMN O_KEY)*/ OORDER
                    SET O_CARRIER_ID = ?
                  WHERE O_KEY = ?
             </statement>
             <statement name="delivUpdateDeliveryDateSQL">
-                UPDATE ORDER_LINE
+                UPDATE /*++ INDEX(ORDER_LINE, COLUMN OL_O_KEY)*/ ORDER_LINE
                    SET OL_DELIVERY_D = ?
                  WHERE OL_O_KEY = ?
             </statement>
             <statement name="delivSumOrderAmountSQL">
-                SELECT SUM(OL_AMOUNT) AS OL_TOTAL
+                SELECT /*++ INDEX(ORDER_LINE, COLUMN OL_O_KEY)*/ SUM(OL_AMOUNT) AS OL_TOTAL
                   FROM ORDER_LINE
                  WHERE OL_O_KEY = ?
             </statement>
             <statement name="delivUpdateCustBalDelivCntSQL">
-                UPDATE CUSTOMER
+                UPDATE /*++ INDEX(CUSTOMER, COLUMN C_KEY)*/ CUSTOMER
                    SET C_BALANCE = C_BALANCE + ?,
                        C_DELIVERY_CNT = C_DELIVERY_CNT + 1
                  WHERE C_KEY = ?
@@ -168,12 +168,12 @@
         </procedure>
         <procedure name="StockLevel">
             <statement name="stockGetDistOrderIdSQL">
-                SELECT D_NEXT_O_ID
+                SELECT /*++ INDEX(DISTRICT, COLUMN D_KEY)*/ D_NEXT_O_ID
                   FROM DISTRICT
                  WHERE D_KEY = ?
             </statement>
             <statement name="stockGetCountStockSQL">
-                SELECT COUNT(DISTINCT (S_I_ID)) AS STOCK_COUNT
+                SELECT /*++ INDEX(ORDER_LINE, COLUMN OL_O_KEY)*/ COUNT(DISTINCT (S_I_ID)) AS STOCK_COUNT
                   FROM ORDER_LINE, STOCK
                  WHERE OL_O_KEY &lt; ?
                    AND OL_O_KEY >= ?
