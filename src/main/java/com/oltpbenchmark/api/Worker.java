@@ -21,7 +21,6 @@ import static com.oltpbenchmark.types.State.MEASURE;
 
 import com.oltpbenchmark.*;
 import com.oltpbenchmark.api.Procedure.UserAbortException;
-import com.oltpbenchmark.jdbc.LoggingPreparedStatement;
 import com.oltpbenchmark.types.DatabaseType;
 import com.oltpbenchmark.types.State;
 import com.oltpbenchmark.types.TransactionStatus;
@@ -442,7 +441,6 @@ public abstract class Worker<T extends BenchmarkModule> implements Runnable {
             LOG.debug(String.format("%s %s attempting...", this, transactionType));
           }
 
-          LoggingPreparedStatement.logTxnStart(transactionType.getName());
           status = this.executeWork(conn, transactionType);
 
           if (LOG.isDebugEnabled()) {
@@ -457,14 +455,11 @@ public abstract class Worker<T extends BenchmarkModule> implements Runnable {
 
           conn.commit();
 
-          LoggingPreparedStatement.logTxnEnd("TXN_COMMIT");
-
           break;
 
         } catch (UserAbortException ex) {
           try {
             conn.rollback();
-            LoggingPreparedStatement.logTxnEnd("TXN_ROLLBACK");
           } catch (SQLException ex2) {
             LOG.error("SQLException caught while rolling back transaction.", ex2);
             // force a reconnection
@@ -523,7 +518,6 @@ public abstract class Worker<T extends BenchmarkModule> implements Runnable {
                   ex);
               try {
                 conn.rollback();
-                LoggingPreparedStatement.logTxnEnd("TXN_ROLLBACK");
               } catch (SQLException ex2) {
                 LOG.error("SQLException caught while attempting to rollback transaction.", ex2);
                 // force a reconnection
@@ -557,7 +551,6 @@ public abstract class Worker<T extends BenchmarkModule> implements Runnable {
                   ex);
               try {
                 conn.rollback();
-                LoggingPreparedStatement.logTxnEnd("TXN_ROLLBACK");
               } catch (SQLException ex2) {
                 LOG.error("SQLException caught while attempting to rollback transaction.", ex2);
                 // force a reconnection

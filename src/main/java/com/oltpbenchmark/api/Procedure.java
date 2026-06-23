@@ -18,7 +18,6 @@
 package com.oltpbenchmark.api;
 
 import com.oltpbenchmark.jdbc.AutoIncrementPreparedStatement;
-import com.oltpbenchmark.jdbc.LoggingPreparedStatement;
 import com.oltpbenchmark.types.DatabaseType;
 import com.oltpbenchmark.util.MonitoringUtil;
 import java.lang.reflect.Field;
@@ -127,10 +126,6 @@ public abstract class Procedure {
     // They don't care about keys
     else {
       pStmt = conn.prepareStatement(stmt.getSQL());
-    }
-
-    if (LoggingPreparedStatement.isEnabled()) {
-      pStmt = new LoggingPreparedStatement(pStmt, stmt.getSQL());
     }
 
     return (pStmt);
