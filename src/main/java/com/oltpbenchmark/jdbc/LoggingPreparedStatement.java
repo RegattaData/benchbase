@@ -157,6 +157,11 @@ public class LoggingPreparedStatement implements PreparedStatement {
   // Core logging
   // -------------------------------------------------------------------------
 
+  /** Package-private so LoggingResultSet can emit RS_NEXT_1 and RS_CLOSE events. */
+  static void writeEventPublic(String event, long durationNs, String sql) {
+    writeEvent(event, durationNs, sql);
+  }
+
   private static void writeEvent(String event, long durationNs, String sql) {
     PrintWriter pw = logWriter;
     if (pw == null) return;
@@ -250,7 +255,7 @@ public class LoggingPreparedStatement implements PreparedStatement {
     try {
       ResultSet rs = delegate.executeQuery();
       writeEvent("QUERY_END", System.nanoTime() - start, sql);
-      return rs;
+      return new LoggingResultSet(rs, sql);
     } catch (SQLException e) {
       writeEvent("QUERY_ERROR", System.nanoTime() - start, sql);
       throw e;
@@ -645,7 +650,12 @@ public class LoggingPreparedStatement implements PreparedStatement {
 
   @Override
   public void close() throws SQLException {
-    delegate.close();
+    long start = System.nanoTime();
+    try {
+      delegate.close();
+    } finally {
+      writeEvent("STMT_CLOSE", System.nanoTime() - start, sqlTemplate);
+    }
   }
 
   @Override

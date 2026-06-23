@@ -219,7 +219,7 @@ public class NewOrder extends TPCCProcedure {
 
         float ol_amount = ol_quantity * i_price;
 
-        Stock s = getStock(conn, ol_supply_w_id, ol_i_id, ol_quantity);
+        Stock s = getStock(conn, ol_supply_w_id, ol_i_id, ol_quantity, d_id);
 
         String ol_dist_info = getDistInfo(d_id, s);
 
@@ -267,6 +267,10 @@ public class NewOrder extends TPCCProcedure {
   }
 
   private String getDistInfo(int d_id, Stock s) {
+    // For the Regatta dialect the CASE query collapsed the needed district string into s_dist_01.
+    if (this.getDbType() == DatabaseType.REGATTA) {
+      return s.s_dist_01;
+    }
     return switch (d_id) {
       case 1 -> s.s_dist_01;
       case 2 -> s.s_dist_02;
@@ -282,11 +286,15 @@ public class NewOrder extends TPCCProcedure {
     };
   }
 
-  private Stock getStock(Connection conn, int ol_supply_w_id, int ol_i_id, int ol_quantity)
+  private Stock getStock(
+      Connection conn, int ol_supply_w_id, int ol_i_id, int ol_quantity, int d_id)
       throws SQLException {
     try (PreparedStatement stmtGetStock = this.getPreparedStatement(conn, stmtGetStockSQL)) {
       if (this.getDbType() == DatabaseType.REGATTA) {
-        stmtGetStock.setLong(1, TPCCUtil.concatWarehouseItemKey(ol_supply_w_id, ol_i_id));
+        // First ? is the CASE expression for district id (selects the single needed S_DIST_XX).
+        // Second ? is the surrogate key lookup.
+        stmtGetStock.setInt(1, d_id);
+        stmtGetStock.setLong(2, TPCCUtil.concatWarehouseItemKey(ol_supply_w_id, ol_i_id));
       } else {
         stmtGetStock.setInt(1, ol_i_id);
         stmtGetStock.setInt(2, ol_supply_w_id);
@@ -297,16 +305,21 @@ public class NewOrder extends TPCCProcedure {
         }
         Stock s = new Stock();
         s.s_quantity = rs.getInt("S_QUANTITY");
-        s.s_dist_01 = rs.getString("S_DIST_01");
-        s.s_dist_02 = rs.getString("S_DIST_02");
-        s.s_dist_03 = rs.getString("S_DIST_03");
-        s.s_dist_04 = rs.getString("S_DIST_04");
-        s.s_dist_05 = rs.getString("S_DIST_05");
-        s.s_dist_06 = rs.getString("S_DIST_06");
-        s.s_dist_07 = rs.getString("S_DIST_07");
-        s.s_dist_08 = rs.getString("S_DIST_08");
-        s.s_dist_09 = rs.getString("S_DIST_09");
-        s.s_dist_10 = rs.getString("S_DIST_10");
+        if (this.getDbType() == DatabaseType.REGATTA) {
+          // Only the single needed district string was fetched via the CASE expression.
+          s.s_dist_01 = rs.getString("S_DIST_INFO");
+        } else {
+          s.s_dist_01 = rs.getString("S_DIST_01");
+          s.s_dist_02 = rs.getString("S_DIST_02");
+          s.s_dist_03 = rs.getString("S_DIST_03");
+          s.s_dist_04 = rs.getString("S_DIST_04");
+          s.s_dist_05 = rs.getString("S_DIST_05");
+          s.s_dist_06 = rs.getString("S_DIST_06");
+          s.s_dist_07 = rs.getString("S_DIST_07");
+          s.s_dist_08 = rs.getString("S_DIST_08");
+          s.s_dist_09 = rs.getString("S_DIST_09");
+          s.s_dist_10 = rs.getString("S_DIST_10");
+        }
 
         if (s.s_quantity - ol_quantity >= 10) {
           s.s_quantity -= ol_quantity;
