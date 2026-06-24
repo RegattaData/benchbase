@@ -126,6 +126,22 @@ public class Payment extends TPCCProcedure {
     """
               .formatted(TPCCConstants.TABLENAME_CUSTOMER));
 
+  public SQLStmt payUpdateCustBalReturningSQL =
+      new SQLStmt(
+          """
+              UPDATE %s
+                 SET C_BALANCE = ?,
+                     C_YTD_PAYMENT = ?,
+                     C_PAYMENT_CNT = ?
+               WHERE C_W_ID = ?
+                 AND C_D_ID = ?
+                 AND C_ID = ?
+           RETURNING C_FIRST, C_MIDDLE, C_LAST, C_STREET_1, C_STREET_2,
+                     C_CITY, C_STATE, C_ZIP, C_PHONE, C_CREDIT, C_CREDIT_LIM,
+                     C_DISCOUNT, C_BALANCE, C_YTD_PAYMENT, C_PAYMENT_CNT, C_SINCE
+          """
+              .formatted(TPCCConstants.TABLENAME_CUSTOMER));
+
   public SQLStmt payInsertHistSQL =
       new SQLStmt(
           """
@@ -176,9 +192,18 @@ public class Payment extends TPCCProcedure {
     int customerDistrictID = getCustomerDistrictId(gen, districtID, x);
     int customerWarehouseID = getCustomerWarehouseID(gen, w_id, numWarehouses, x);
 
+    // TPC-C 2.5.2.2: 60% by last name, 40% by customer id.
+    boolean lookupByName = TPCCUtil.randomNumber(1, 100, gen) <= 60;
+
     Customer c =
         getCustomer(
-            conn, gen, customerDistrictID, customerWarehouseID, paymentAmount, numWarehouses);
+            conn,
+            gen,
+            customerDistrictID,
+            customerWarehouseID,
+            paymentAmount,
+            numWarehouses,
+            lookupByName);
 
     if (c.c_credit.equals("BC")) {
       // bad credit
@@ -190,8 +215,11 @@ public class Payment extends TPCCProcedure {
 
     } else {
       // GoodCredit
-
-      updateBalance(conn, customerDistrictID, customerWarehouseID, c);
+      if (this.getDbType() == DatabaseType.REGATTA && !lookupByName) {
+        c = updateBalanceReturningById(conn, customerDistrictID, customerWarehouseID, c);
+      } else {
+        updateBalance(conn, customerDistrictID, customerWarehouseID, c);
+      }
     }
 
     insertHistory(
@@ -351,13 +379,12 @@ public class Payment extends TPCCProcedure {
       int customerDistrictID,
       int customerWarehouseID,
       float paymentAmount,
-      int numWarehouses)
+      int numWarehouses,
+      boolean lookupByName)
       throws SQLException {
-    int y = TPCCUtil.randomNumber(1, 100, gen);
-
     Customer c;
 
-    if (y <= 60) {
+    if (lookupByName) {
       // 60% lookups by last name
       c =
           getCustomerByName(
@@ -543,6 +570,43 @@ public class Payment extends TPCCProcedure {
                 + " C_D_ID="
                 + customerDistrictID
                 + " not found!");
+      }
+    }
+  }
+
+  private Customer updateBalanceReturningById(
+      Connection conn, int customerDistrictID, int customerWarehouseID, Customer c)
+      throws SQLException {
+    try (PreparedStatement payUpdateCustBal =
+        this.getPreparedStatement(conn, payUpdateCustBalReturningSQL)) {
+      payUpdateCustBal.setDouble(1, c.c_balance);
+      payUpdateCustBal.setDouble(2, c.c_ytd_payment);
+      payUpdateCustBal.setInt(3, c.c_payment_cnt);
+      if (this.getDbType() == DatabaseType.REGATTA) {
+        payUpdateCustBal.setLong(
+            4, TPCCUtil.concatCustomerKey(customerWarehouseID, customerDistrictID, c.c_id));
+      } else {
+        payUpdateCustBal.setInt(4, customerWarehouseID);
+        payUpdateCustBal.setInt(5, customerDistrictID);
+        payUpdateCustBal.setInt(6, c.c_id);
+      }
+
+      try (ResultSet rs = payUpdateCustBal.executeQuery()) {
+        if (!rs.next()) {
+          throw new RuntimeException(
+              "C_ID="
+                  + c.c_id
+                  + " C_W_ID="
+                  + customerWarehouseID
+                  + " C_D_ID="
+                  + customerDistrictID
+                  + " not found!");
+        }
+
+        Customer updated = TPCCUtil.newCustomerFromResults(rs);
+        updated.c_id = c.c_id;
+        updated.c_last = rs.getString("C_LAST");
+        return updated;
       }
     }
   }
