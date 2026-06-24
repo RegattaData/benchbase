@@ -26,6 +26,7 @@ import com.oltpbenchmark.benchmarks.tpcc.pojo.Stock;
 import com.oltpbenchmark.types.DatabaseType;
 import java.sql.*;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Random;
 import org.slf4j.Logger;
@@ -130,8 +131,9 @@ public class NewOrder extends TPCCProcedure {
   // Parameters 2..16: S_W_I_KEY values (one per order line, padded to
   // MAX_OL_CNT).
   // The ?? is expanded to MAX_OL_CNT (15) positional placeholders by SQLStmt.
-  public final SQLStmt stmtGetStockBatchSQL = new SQLStmt(
-      """
+  public final SQLStmt stmtGetStockBatchSQL =
+      new SQLStmt(
+          """
               SELECT S_W_I_KEY, S_QUANTITY, S_DATA,
                      CASE ?
                        WHEN 1  THEN S_DIST_01
@@ -148,8 +150,8 @@ public class NewOrder extends TPCCProcedure {
                 FROM %s
                WHERE S_W_I_KEY IN (??)
           """
-          .formatted(TPCCConstants.TABLENAME_STOCK),
-      TPCCConfig.MAX_OL_CNT);
+              .formatted(TPCCConstants.TABLENAME_STOCK),
+          TPCCConfig.MAX_OL_CNT);
 
   public final SQLStmt stmtUpdateStockSQL =
       new SQLStmt(
@@ -248,14 +250,17 @@ public class NewOrder extends TPCCProcedure {
 
     // Regatta: pre-fetch all item prices and stock rows in single IN-list
     // round-trips.
+    boolean isRegatta = this.getDbType() == DatabaseType.REGATTA;
     float[] batchItemPrices = null;
     Map<Long, Stock> batchStockMap = null;
-    if (this.getDbType() == DatabaseType.REGATTA) {
+    Map<Long, Stock> stockUpdates = isRegatta ? new LinkedHashMap<>() : null;
+    if (isRegatta) {
       batchItemPrices = getItemPricesBatch(conn, itemIDs, o_ol_cnt);
       batchStockMap = getStockBatch(conn, d_id, supplierWarehouseIDs, itemIDs, o_ol_cnt);
     }
 
-    try (PreparedStatement stmtUpdateStock = this.getPreparedStatement(conn, stmtUpdateStockSQL);
+    try (PreparedStatement stmtUpdateStock =
+            isRegatta ? null : this.getPreparedStatement(conn, stmtUpdateStockSQL);
         PreparedStatement stmtInsertOrderLine =
             this.getPreparedStatement(conn, stmtInsertOrderLineSQL)) {
 
@@ -273,13 +278,25 @@ public class NewOrder extends TPCCProcedure {
         float ol_amount = ol_quantity * i_price;
 
         Stock s;
-        if (batchStockMap != null) {
+        int s_remote_cnt_increment = (ol_supply_w_id == w_id) ? 0 : 1;
+        if (isRegatta) {
           long key = TPCCUtil.concatWarehouseItemKey(ol_supply_w_id, ol_i_id);
-          s = batchStockMap.get(key);
+          // Use the stock row from the batch read; track it in stockUpdates for
+          // the final CASE UPDATE.
+          s = stockUpdates.get(key);
           if (s == null) {
-            throw new RuntimeException("S_W_I_KEY=" + key + " not found in batch result!");
+            s = batchStockMap.get(key);
+            if (s == null) {
+              throw new RuntimeException("S_W_I_KEY=" + key + " not found in batch result!");
+            }
+            applyQuantityAdjustment(s, ol_quantity);
+            stockUpdates.put(key, s);
+          } else {
+            applyQuantityAdjustment(s, ol_quantity);
           }
-          applyQuantityAdjustment(s, ol_quantity);
+          s.s_ytd += ol_quantity;
+          s.s_order_cnt += 1;
+          s.s_remote_cnt += s_remote_cnt_increment;
         } else {
           s = getStock(conn, ol_supply_w_id, ol_i_id, ol_quantity, d_id);
         }
@@ -301,31 +318,25 @@ public class NewOrder extends TPCCProcedure {
         }
         stmtInsertOrderLine.addBatch();
 
-        int s_remote_cnt_increment;
-
-        if (ol_supply_w_id == w_id) {
-          s_remote_cnt_increment = 0;
-        } else {
-          s_remote_cnt_increment = 1;
-        }
-
-        stmtUpdateStock.setInt(1, s.s_quantity);
-        stmtUpdateStock.setInt(2, ol_quantity);
-        stmtUpdateStock.setInt(3, s_remote_cnt_increment);
-        if (this.getDbType() == DatabaseType.REGATTA) {
-          stmtUpdateStock.setLong(4, TPCCUtil.concatWarehouseItemKey(ol_supply_w_id, ol_i_id));
-        } else {
+        if (!isRegatta) {
+          stmtUpdateStock.setInt(1, s.s_quantity);
+          stmtUpdateStock.setInt(2, ol_quantity);
+          stmtUpdateStock.setInt(3, s_remote_cnt_increment);
           stmtUpdateStock.setInt(4, ol_i_id);
           stmtUpdateStock.setInt(5, ol_supply_w_id);
+          stmtUpdateStock.addBatch();
         }
-        stmtUpdateStock.addBatch();
       }
 
       stmtInsertOrderLine.executeBatch();
       stmtInsertOrderLine.clearBatch();
 
-      stmtUpdateStock.executeBatch();
-      stmtUpdateStock.clearBatch();
+      if (isRegatta) {
+        executeBatchStockUpdate(conn, stockUpdates);
+      } else {
+        stmtUpdateStock.executeBatch();
+        stmtUpdateStock.clearBatch();
+      }
     }
   }
 
@@ -357,6 +368,61 @@ public class NewOrder extends TPCCProcedure {
     }
   }
 
+  private void executeBatchStockUpdate(Connection conn, Map<Long, Stock> stockUpdates)
+      throws SQLException {
+    if (stockUpdates.isEmpty()) {
+      return;
+    }
+
+    StringBuilder sql = new StringBuilder();
+    sql.append("UPDATE /*++ INDEX(STOCK, COLUMN S_W_I_KEY)*/ ")
+        .append(TPCCConstants.TABLENAME_STOCK)
+        .append("\n   SET S_QUANTITY = CASE S_W_I_KEY");
+    for (Map.Entry<Long, Stock> entry : stockUpdates.entrySet()) {
+      sql.append("\n        WHEN ")
+          .append(entry.getKey())
+          .append(" THEN ")
+          .append(entry.getValue().s_quantity);
+    }
+    sql.append("\n       END,\n       S_YTD = S_YTD + CASE S_W_I_KEY");
+    for (Map.Entry<Long, Stock> entry : stockUpdates.entrySet()) {
+      sql.append("\n        WHEN ")
+          .append(entry.getKey())
+          .append(" THEN ")
+          .append(entry.getValue().s_ytd);
+    }
+    sql.append("\n       END,\n       S_ORDER_CNT = S_ORDER_CNT + CASE S_W_I_KEY");
+    for (Map.Entry<Long, Stock> entry : stockUpdates.entrySet()) {
+      sql.append("\n        WHEN ")
+          .append(entry.getKey())
+          .append(" THEN ")
+          .append(entry.getValue().s_order_cnt);
+    }
+    sql.append("\n       END,\n       S_REMOTE_CNT = S_REMOTE_CNT + CASE S_W_I_KEY");
+    for (Map.Entry<Long, Stock> entry : stockUpdates.entrySet()) {
+      sql.append("\n        WHEN ")
+          .append(entry.getKey())
+          .append(" THEN ")
+          .append(entry.getValue().s_remote_cnt);
+    }
+    sql.append("\n       END\n WHERE S_W_I_KEY IN (");
+
+    boolean first = true;
+    for (Long key : stockUpdates.keySet()) {
+      if (!first) sql.append(", ");
+      sql.append(key);
+      first = false;
+    }
+    sql.append(")");
+
+    try (Statement stmt = conn.createStatement()) {
+      int result = stmt.executeUpdate(sql.toString());
+      if (result == 0) {
+        LOG.warn("stock batch not updated");
+      }
+    }
+  }
+
   private Map<Long, Stock> getStockBatch(
       Connection conn, int d_id, int[] supplierWarehouseIDs, int[] itemIDs, int numItems)
       throws SQLException {
@@ -366,12 +432,14 @@ public class NewOrder extends TPCCProcedure {
       // transaction).
       stmt.setInt(1, d_id);
       // Params 2..16: S_W_I_KEY values, padded with the last real key.
-      long lastKey = TPCCUtil.concatWarehouseItemKey(
-          supplierWarehouseIDs[numItems - 1], itemIDs[numItems - 1]);
+      long lastKey =
+          TPCCUtil.concatWarehouseItemKey(
+              supplierWarehouseIDs[numItems - 1], itemIDs[numItems - 1]);
       for (int i = 0; i < TPCCConfig.MAX_OL_CNT; i++) {
-        long key = (i < numItems)
-            ? TPCCUtil.concatWarehouseItemKey(supplierWarehouseIDs[i], itemIDs[i])
-            : lastKey;
+        long key =
+            (i < numItems)
+                ? TPCCUtil.concatWarehouseItemKey(supplierWarehouseIDs[i], itemIDs[i])
+                : lastKey;
         stmt.setLong(i + 2, key);
       }
       try (ResultSet rs = stmt.executeQuery()) {
