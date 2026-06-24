@@ -219,7 +219,7 @@ public class Payment extends TPCCProcedure {
 
     } else {
       // GoodCredit
-      if (this.getDbType() == DatabaseType.REGATTA && !lookupByName) {
+      if (this.getDbType() == DatabaseType.REGATTA) {
         c = updateBalanceReturningById(conn, customerDistrictID, customerWarehouseID, c);
       } else {
         updateBalance(conn, customerDistrictID, customerWarehouseID, c);
