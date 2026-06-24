@@ -124,6 +124,33 @@ public class NewOrder extends TPCCProcedure {
     """
               .formatted(TPCCConstants.TABLENAME_STOCK));
 
+  // Regatta: fetch all order-line stock rows in one IN-list query.
+  // Parameter 1: district id (constant per transaction, drives the CASE
+  // expression).
+  // Parameters 2..16: S_W_I_KEY values (one per order line, padded to
+  // MAX_OL_CNT).
+  // The ?? is expanded to MAX_OL_CNT (15) positional placeholders by SQLStmt.
+  public final SQLStmt stmtGetStockBatchSQL = new SQLStmt(
+      """
+              SELECT S_W_I_KEY, S_QUANTITY, S_DATA,
+                     CASE ?
+                       WHEN 1  THEN S_DIST_01
+                       WHEN 2  THEN S_DIST_02
+                       WHEN 3  THEN S_DIST_03
+                       WHEN 4  THEN S_DIST_04
+                       WHEN 5  THEN S_DIST_05
+                       WHEN 6  THEN S_DIST_06
+                       WHEN 7  THEN S_DIST_07
+                       WHEN 8  THEN S_DIST_08
+                       WHEN 9  THEN S_DIST_09
+                       WHEN 10 THEN S_DIST_10
+                     END AS S_DIST_INFO
+                FROM %s
+               WHERE S_W_I_KEY IN (??)
+          """
+          .formatted(TPCCConstants.TABLENAME_STOCK),
+      TPCCConfig.MAX_OL_CNT);
+
   public final SQLStmt stmtUpdateStockSQL =
       new SQLStmt(
           """
@@ -219,10 +246,13 @@ public class NewOrder extends TPCCProcedure {
 
     insertNewOrder(conn, w_id, d_id, d_next_o_id);
 
-    // Regatta: pre-fetch all item prices in a single IN-list round-trip.
+    // Regatta: pre-fetch all item prices and stock rows in single IN-list
+    // round-trips.
     float[] batchItemPrices = null;
+    Map<Long, Stock> batchStockMap = null;
     if (this.getDbType() == DatabaseType.REGATTA) {
       batchItemPrices = getItemPricesBatch(conn, itemIDs, o_ol_cnt);
+      batchStockMap = getStockBatch(conn, d_id, supplierWarehouseIDs, itemIDs, o_ol_cnt);
     }
 
     try (PreparedStatement stmtUpdateStock = this.getPreparedStatement(conn, stmtUpdateStockSQL);
@@ -242,7 +272,17 @@ public class NewOrder extends TPCCProcedure {
 
         float ol_amount = ol_quantity * i_price;
 
-        Stock s = getStock(conn, ol_supply_w_id, ol_i_id, ol_quantity, d_id);
+        Stock s;
+        if (batchStockMap != null) {
+          long key = TPCCUtil.concatWarehouseItemKey(ol_supply_w_id, ol_i_id);
+          s = batchStockMap.get(key);
+          if (s == null) {
+            throw new RuntimeException("S_W_I_KEY=" + key + " not found in batch result!");
+          }
+          applyQuantityAdjustment(s, ol_quantity);
+        } else {
+          s = getStock(conn, ol_supply_w_id, ol_i_id, ol_quantity, d_id);
+        }
 
         String ol_dist_info = getDistInfo(d_id, s);
 
@@ -309,6 +349,44 @@ public class NewOrder extends TPCCProcedure {
     };
   }
 
+  private void applyQuantityAdjustment(Stock s, int ol_quantity) {
+    if (s.s_quantity - ol_quantity >= 10) {
+      s.s_quantity -= ol_quantity;
+    } else {
+      s.s_quantity += -ol_quantity + 91;
+    }
+  }
+
+  private Map<Long, Stock> getStockBatch(
+      Connection conn, int d_id, int[] supplierWarehouseIDs, int[] itemIDs, int numItems)
+      throws SQLException {
+    Map<Long, Stock> stockMap = new HashMap<>();
+    try (PreparedStatement stmt = this.getPreparedStatement(conn, stmtGetStockBatchSQL)) {
+      // Param 1: district id for the CASE expression (same for all rows in this
+      // transaction).
+      stmt.setInt(1, d_id);
+      // Params 2..16: S_W_I_KEY values, padded with the last real key.
+      long lastKey = TPCCUtil.concatWarehouseItemKey(
+          supplierWarehouseIDs[numItems - 1], itemIDs[numItems - 1]);
+      for (int i = 0; i < TPCCConfig.MAX_OL_CNT; i++) {
+        long key = (i < numItems)
+            ? TPCCUtil.concatWarehouseItemKey(supplierWarehouseIDs[i], itemIDs[i])
+            : lastKey;
+        stmt.setLong(i + 2, key);
+      }
+      try (ResultSet rs = stmt.executeQuery()) {
+        while (rs.next()) {
+          Stock s = new Stock();
+          s.s_quantity = rs.getInt("S_QUANTITY");
+          // CASE expression collapsed the needed district string into S_DIST_INFO.
+          s.s_dist_01 = rs.getString("S_DIST_INFO");
+          stockMap.put(rs.getLong("S_W_I_KEY"), s);
+        }
+      }
+    }
+    return stockMap;
+  }
+
   private Stock getStock(
       Connection conn, int ol_supply_w_id, int ol_i_id, int ol_quantity, int d_id)
       throws SQLException {
@@ -344,11 +422,7 @@ public class NewOrder extends TPCCProcedure {
           s.s_dist_10 = rs.getString("S_DIST_10");
         }
 
-        if (s.s_quantity - ol_quantity >= 10) {
-          s.s_quantity -= ol_quantity;
-        } else {
-          s.s_quantity += -ol_quantity + 91;
-        }
+        applyQuantityAdjustment(s, ol_quantity);
 
         return s;
       }

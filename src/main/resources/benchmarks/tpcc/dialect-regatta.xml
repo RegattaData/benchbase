@@ -64,6 +64,23 @@
                   FROM ITEM
                  WHERE I_ID IN (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             </statement>
+            <statement name="stmtGetStockBatchSQL">
+                SELECT /*++ INDEX(STOCK, COLUMN S_W_I_KEY)*/ S_W_I_KEY, S_QUANTITY, S_DATA,
+                       CASE ?
+                         WHEN 1  THEN S_DIST_01
+                         WHEN 2  THEN S_DIST_02
+                         WHEN 3  THEN S_DIST_03
+                         WHEN 4  THEN S_DIST_04
+                         WHEN 5  THEN S_DIST_05
+                         WHEN 6  THEN S_DIST_06
+                         WHEN 7  THEN S_DIST_07
+                         WHEN 8  THEN S_DIST_08
+                         WHEN 9  THEN S_DIST_09
+                         WHEN 10 THEN S_DIST_10
+                       END AS S_DIST_INFO
+                  FROM STOCK
+                 WHERE S_W_I_KEY IN (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            </statement>
         </procedure>
         <procedure name="Payment">
             <statement name="payUpdateDistSQL">
