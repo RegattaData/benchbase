@@ -34,6 +34,9 @@ public final class TPCCConfig {
   public static final int configDistPerWhse = 10; // tpc-c std = 10
   public static final int configCustPerDist = 3000; // tpc-c std = 3,000
 
+  /** Maximum number of order lines per NewOrder transaction (TPC-C 2.4.1.3). */
+  public static final int MAX_OL_CNT = 15;
+
   /** An invalid item id used to rollback a new order transaction. */
   public static final int INVALID_ITEM_ID = -12345;
 }

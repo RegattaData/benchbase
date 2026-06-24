@@ -25,6 +25,8 @@ import com.oltpbenchmark.benchmarks.tpcc.TPCCWorker;
 import com.oltpbenchmark.benchmarks.tpcc.pojo.Stock;
 import com.oltpbenchmark.types.DatabaseType;
 import java.sql.*;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Random;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -98,6 +100,18 @@ public class NewOrder extends TPCCProcedure {
          WHERE I_ID = ?
     """
               .formatted(TPCCConstants.TABLENAME_ITEM));
+
+  // Regatta: fetch all order-line items in one IN-list query.
+  // The ?? is expanded to MAX_OL_CNT (15) positional placeholders by SQLStmt.
+  public final SQLStmt stmtGetItemsBatchSQL =
+      new SQLStmt(
+          """
+        SELECT I_ID, I_PRICE
+          FROM %s
+         WHERE I_ID IN (??)
+    """
+              .formatted(TPCCConstants.TABLENAME_ITEM),
+          TPCCConfig.MAX_OL_CNT);
 
   public final SQLStmt stmtGetStockSQL =
       new SQLStmt(
@@ -205,6 +219,12 @@ public class NewOrder extends TPCCProcedure {
 
     insertNewOrder(conn, w_id, d_id, d_next_o_id);
 
+    // Regatta: pre-fetch all item prices in a single IN-list round-trip.
+    float[] batchItemPrices = null;
+    if (this.getDbType() == DatabaseType.REGATTA) {
+      batchItemPrices = getItemPricesBatch(conn, itemIDs, o_ol_cnt);
+    }
+
     try (PreparedStatement stmtUpdateStock = this.getPreparedStatement(conn, stmtUpdateStockSQL);
         PreparedStatement stmtInsertOrderLine =
             this.getPreparedStatement(conn, stmtInsertOrderLineSQL)) {
@@ -215,7 +235,10 @@ public class NewOrder extends TPCCProcedure {
         int ol_quantity = orderQuantities[ol_number - 1];
 
         // this may occasionally error and that's ok!
-        float i_price = getItemPrice(conn, ol_i_id);
+        float i_price =
+            (batchItemPrices != null)
+                ? batchItemPrices[ol_number - 1]
+                : getItemPrice(conn, ol_i_id);
 
         float ol_amount = ol_quantity * i_price;
 
@@ -330,6 +353,33 @@ public class NewOrder extends TPCCProcedure {
         return s;
       }
     }
+  }
+
+  private float[] getItemPricesBatch(Connection conn, int[] itemIDs, int numItems)
+      throws SQLException {
+    float[] prices = new float[numItems];
+    try (PreparedStatement stmt = this.getPreparedStatement(conn, stmtGetItemsBatchSQL)) {
+      // Bind real item IDs; pad remaining slots with the last real ID.
+      int lastId = itemIDs[numItems - 1];
+      for (int i = 1; i <= TPCCConfig.MAX_OL_CNT; i++) {
+        stmt.setInt(i, i <= numItems ? itemIDs[i - 1] : lastId);
+      }
+      Map<Integer, Float> priceMap = new HashMap<>();
+      try (ResultSet rs = stmt.executeQuery()) {
+        while (rs.next()) {
+          priceMap.put(rs.getInt("I_ID"), rs.getFloat("I_PRICE"));
+        }
+      }
+      for (int i = 0; i < numItems; i++) {
+        Float p = priceMap.get(itemIDs[i]);
+        if (p == null) {
+          throw new UserAbortException(
+              "EXPECTED new order rollback: I_ID=" + itemIDs[i] + " not found!");
+        }
+        prices[i] = p;
+      }
+    }
+    return prices;
   }
 
   private float getItemPrice(Connection conn, int ol_i_id) throws SQLException {

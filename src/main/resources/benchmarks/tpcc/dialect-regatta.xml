@@ -59,6 +59,11 @@
                  (OL_O_ID, OL_D_ID, OL_W_ID, OL_NUMBER, OL_I_ID, OL_SUPPLY_W_ID, OL_QUANTITY, OL_AMOUNT, OL_DIST_INFO, OL_O_KEY, OL_W_I_KEY)
                  VALUES (?,?,?,?,?,?,?,?,?,?,?)
             </statement>
+            <statement name="stmtGetItemsBatchSQL">
+                SELECT /*++ INDEX(ITEM, COLUMN I_ID)*/ I_ID, I_PRICE
+                  FROM ITEM
+                 WHERE I_ID IN (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            </statement>
         </procedure>
         <procedure name="Payment">
             <statement name="payUpdateDistSQL">
