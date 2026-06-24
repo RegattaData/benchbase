@@ -190,6 +190,16 @@
                 DELETE /*++ INDEX(NEW_ORDER, COLUMN NO_KEY)*/ FROM NEW_ORDER
                 WHERE NO_KEY = ?
             </statement>
+            <statement name="delivDeleteReturningSQL">
+                DELETE /*++ INDEX(NEW_ORDER, COLUMN NO_KEY)*/ FROM NEW_ORDER
+                 WHERE NO_KEY = (
+                     SELECT NO_KEY FROM NEW_ORDER
+                      WHERE NO_KEY BETWEEN ? AND ?
+                      ORDER BY NO_KEY ASC
+                      LIMIT 1
+                 )
+             RETURNING NO_O_ID
+            </statement>
             <statement name="delivGetCustIdSQL">
                 SELECT /*++ INDEX(OORDER, COLUMN O_KEY)*/ O_C_ID FROM OORDER
                 WHERE O_KEY = ?

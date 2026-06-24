@@ -25,6 +25,10 @@ import com.oltpbenchmark.benchmarks.tpcc.TPCCWorker;
 import com.oltpbenchmark.types.DatabaseType;
 import java.math.BigDecimal;
 import java.sql.*;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.Random;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -109,6 +113,21 @@ public class Delivery extends TPCCProcedure {
     """
               .formatted(TPCCConstants.TABLENAME_CUSTOMER));
 
+  // Regatta: combined per-district DELETE + RETURNING NO_O_ID.
+  // Replaces the two-step delivGetOrderIdSQL + delivDeleteNewOrderSQL.
+  public SQLStmt delivDeleteReturningSQL =
+      new SQLStmt(
+          """
+              DELETE FROM %s
+               WHERE NO_O_ID = ?
+                 AND NO_D_ID = ?
+                 AND NO_W_ID = ?
+          """
+              .formatted(TPCCConstants.TABLENAME_NEWORDER));
+
+  /** Per-district info collected in Phase 1 of the Regatta delivery flow. */
+  private record DistrictOrder(int dId, int noOId, long oKey) {}
+
   public void run(
       Connection conn,
       Random gen,
@@ -125,26 +144,47 @@ public class Delivery extends TPCCProcedure {
 
     int[] orderIDs = new int[10];
 
-    for (d_id = 1; d_id <= terminalDistrictUpperID; d_id++) {
-      Integer no_o_id = getOrderId(conn, w_id, d_id);
+    if (this.getDbType() == DatabaseType.REGATTA) {
+      // Phase 1: per-district DELETE RETURNING — collapses getOrderId + deleteOrder.
+      List<DistrictOrder> activeOrders =
+          deleteOrdersAndCollect(conn, w_id, terminalDistrictUpperID, orderIDs);
 
-      if (no_o_id == null) {
-        continue;
+      if (!activeOrders.isEmpty()) {
+        // Phase 2a: batch UPDATE OORDER carrier → returns O_KEY, O_C_ID.
+        Map<Long, Integer> oKeyToCustId =
+            batchUpdateCarrierAndGetCustIds(conn, activeOrders, o_carrier_id);
+
+        // Phase 2b: batch SUM(OL_AMOUNT) per order.
+        Map<Long, Float> oKeyToTotal = batchSumOrderAmounts(conn, activeOrders);
+
+        // Phase 2c: batch UPDATE ORDER_LINE delivery date.
+        batchUpdateDeliveryDate(conn, activeOrders);
+
+        // Phase 3: single CASE-based UPDATE CUSTOMER.
+        batchUpdateCustomerBalances(conn, w_id, activeOrders, oKeyToCustId, oKeyToTotal);
       }
+    } else {
+      for (d_id = 1; d_id <= terminalDistrictUpperID; d_id++) {
+        Integer no_o_id = getOrderId(conn, w_id, d_id);
 
-      orderIDs[d_id - 1] = no_o_id;
+        if (no_o_id == null) {
+          continue;
+        }
 
-      deleteOrder(conn, w_id, d_id, no_o_id);
+        orderIDs[d_id - 1] = no_o_id;
 
-      int customerId = getCustomerId(conn, w_id, d_id, no_o_id);
+        deleteOrder(conn, w_id, d_id, no_o_id);
 
-      updateCarrierId(conn, w_id, o_carrier_id, d_id, no_o_id);
+        int customerId = getCustomerId(conn, w_id, d_id, no_o_id);
 
-      updateDeliveryDate(conn, w_id, d_id, no_o_id);
+        updateCarrierId(conn, w_id, o_carrier_id, d_id, no_o_id);
 
-      float orderLineTotal = getOrderLineTotal(conn, w_id, d_id, no_o_id);
+        updateDeliveryDate(conn, w_id, d_id, no_o_id);
 
-      updateBalanceAndDelivery(conn, w_id, d_id, customerId, orderLineTotal);
+        float orderLineTotal = getOrderLineTotal(conn, w_id, d_id, no_o_id);
+
+        updateBalanceAndDelivery(conn, w_id, d_id, customerId, orderLineTotal);
+      }
     }
 
     if (LOG.isTraceEnabled()) {
@@ -173,6 +213,165 @@ public class Delivery extends TPCCProcedure {
       LOG.trace(terminalMessage.toString());
     }
   }
+
+  // ---------------------------------------------------------------------------
+  // Regatta-specific batched helpers
+  // ---------------------------------------------------------------------------
+
+  private List<DistrictOrder> deleteOrdersAndCollect(
+      Connection conn, int w_id, int numDistricts, int[] orderIDs) throws SQLException {
+    List<DistrictOrder> result = new ArrayList<>(numDistricts);
+    try (PreparedStatement stmt = this.getPreparedStatement(conn, delivDeleteReturningSQL)) {
+      for (int dId = 1; dId <= numDistricts; dId++) {
+        stmt.setLong(1, TPCCUtil.concatOrderKey(w_id, dId, 1));
+        stmt.setLong(2, TPCCUtil.concatOrderKey(w_id, dId, Integer.MAX_VALUE));
+        try (ResultSet rs = stmt.executeQuery()) {
+          if (!rs.next()) {
+            LOG.warn("District has no new orders [W_ID={}, D_ID={}]", w_id, dId);
+            continue;
+          }
+          int noOId = rs.getInt("NO_O_ID");
+          long oKey = TPCCUtil.concatOrderKey(w_id, dId, noOId);
+          orderIDs[dId - 1] = noOId;
+          result.add(new DistrictOrder(dId, noOId, oKey));
+        }
+      }
+    }
+    return result;
+  }
+
+  private Map<Long, Integer> batchUpdateCarrierAndGetCustIds(
+      Connection conn, List<DistrictOrder> activeOrders, int carrierId) throws SQLException {
+    StringBuilder sql = new StringBuilder();
+    sql.append("UPDATE /*++ INDEX(OORDER, COLUMN O_KEY)*/ ")
+        .append(TPCCConstants.TABLENAME_OPENORDER)
+        .append(" SET O_CARRIER_ID = ")
+        .append(carrierId)
+        .append(" WHERE O_KEY IN (");
+    boolean first = true;
+    for (DistrictOrder order : activeOrders) {
+      if (!first) sql.append(", ");
+      sql.append(order.oKey());
+      first = false;
+    }
+    sql.append(") RETURNING O_KEY, O_C_ID");
+
+    Map<Long, Integer> oKeyToCustId = new LinkedHashMap<>();
+    try (Statement stmt = conn.createStatement();
+        ResultSet rs = stmt.executeQuery(sql.toString())) {
+      while (rs.next()) {
+        oKeyToCustId.put(rs.getLong("O_KEY"), rs.getInt("O_C_ID"));
+      }
+    }
+    if (oKeyToCustId.size() != activeOrders.size()) {
+      throw new RuntimeException(
+          "batchUpdateCarrier: expected "
+              + activeOrders.size()
+              + " rows updated, got "
+              + oKeyToCustId.size());
+    }
+    return oKeyToCustId;
+  }
+
+  private Map<Long, Float> batchSumOrderAmounts(Connection conn, List<DistrictOrder> activeOrders)
+      throws SQLException {
+    StringBuilder sql = new StringBuilder();
+    sql.append("SELECT /*++ INDEX(ORDER_LINE, COLUMN OL_O_KEY)*/ OL_O_KEY,")
+        .append(" SUM(OL_AMOUNT) AS OL_TOTAL")
+        .append(" FROM ")
+        .append(TPCCConstants.TABLENAME_ORDERLINE)
+        .append(" WHERE OL_O_KEY IN (");
+    boolean first = true;
+    for (DistrictOrder order : activeOrders) {
+      if (!first) sql.append(", ");
+      sql.append(order.oKey());
+      first = false;
+    }
+    sql.append(") GROUP BY OL_O_KEY");
+
+    Map<Long, Float> oKeyToTotal = new LinkedHashMap<>();
+    try (Statement stmt = conn.createStatement();
+        ResultSet rs = stmt.executeQuery(sql.toString())) {
+      while (rs.next()) {
+        oKeyToTotal.put(rs.getLong("OL_O_KEY"), rs.getFloat("OL_TOTAL"));
+      }
+    }
+    return oKeyToTotal;
+  }
+
+  private void batchUpdateDeliveryDate(Connection conn, List<DistrictOrder> activeOrders)
+      throws SQLException {
+    Timestamp timestamp = new Timestamp(System.currentTimeMillis());
+    StringBuilder sql = new StringBuilder();
+    sql.append("UPDATE /*++ INDEX(ORDER_LINE, COLUMN OL_O_KEY)*/ ")
+        .append(TPCCConstants.TABLENAME_ORDERLINE)
+        .append(" SET OL_DELIVERY_D = '")
+        .append(timestamp)
+        .append("' WHERE OL_O_KEY IN (");
+    boolean first = true;
+    for (DistrictOrder order : activeOrders) {
+      if (!first) sql.append(", ");
+      sql.append(order.oKey());
+      first = false;
+    }
+    sql.append(")");
+
+    try (Statement stmt = conn.createStatement()) {
+      int result = stmt.executeUpdate(sql.toString());
+      if (result == 0) {
+        throw new RuntimeException("batchUpdateDeliveryDate: no ORDER_LINE rows updated");
+      }
+    }
+  }
+
+  private void batchUpdateCustomerBalances(
+      Connection conn,
+      int w_id,
+      List<DistrictOrder> activeOrders,
+      Map<Long, Integer> oKeyToCustId,
+      Map<Long, Float> oKeyToTotal)
+      throws SQLException {
+    List<long[]> custKeyAndTotalBits = new ArrayList<>(activeOrders.size());
+    for (DistrictOrder order : activeOrders) {
+      Integer cId = oKeyToCustId.get(order.oKey());
+      Float total = oKeyToTotal.get(order.oKey());
+      if (cId == null || total == null) {
+        throw new RuntimeException(
+            "batchUpdateCustomerBalances: missing data for O_KEY=" + order.oKey());
+      }
+      long cKey = TPCCUtil.concatCustomerKey(w_id, order.dId(), cId);
+      custKeyAndTotalBits.add(new long[] {cKey, Float.floatToRawIntBits(total)});
+    }
+
+    StringBuilder sql = new StringBuilder();
+    sql.append("UPDATE /*++ INDEX(CUSTOMER, COLUMN C_KEY)*/ ")
+        .append(TPCCConstants.TABLENAME_CUSTOMER)
+        .append(
+            " SET C_DELIVERY_CNT = C_DELIVERY_CNT + 1,\n       C_BALANCE = C_BALANCE + CASE C_KEY");
+    for (long[] entry : custKeyAndTotalBits) {
+      float total = Float.intBitsToFloat((int) entry[1]);
+      sql.append("\n        WHEN ").append(entry[0]).append(" THEN ").append(total);
+    }
+    sql.append("\n       END\n WHERE C_KEY IN (");
+    boolean first = true;
+    for (long[] entry : custKeyAndTotalBits) {
+      if (!first) sql.append(", ");
+      sql.append(entry[0]);
+      first = false;
+    }
+    sql.append(")");
+
+    try (Statement stmt = conn.createStatement()) {
+      int result = stmt.executeUpdate(sql.toString());
+      if (result == 0) {
+        LOG.warn("batchUpdateCustomerBalances: no CUSTOMER rows updated");
+      }
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Original per-district helpers (non-Regatta path, unchanged)
+  // ---------------------------------------------------------------------------
 
   private Integer getOrderId(Connection conn, int w_id, int d_id) throws SQLException {
 
