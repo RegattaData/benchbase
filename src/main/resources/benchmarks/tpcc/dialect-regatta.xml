@@ -83,10 +83,17 @@
             </statement>
         </procedure>
         <procedure name="Payment">
+                        <statement name="payUpdateWhseSQL">
+                                UPDATE /*++ INDEX(WAREHOUSE, COLUMN W_ID)*/ WAREHOUSE
+                                     SET W_YTD = W_YTD + ?
+                                 WHERE W_ID = ?
+                         RETURNING W_STREET_1, W_STREET_2, W_CITY, W_STATE, W_ZIP, W_NAME
+                        </statement>
             <statement name="payUpdateDistSQL">
                 UPDATE /*++ INDEX(DISTRICT, COLUMN D_KEY)*/ DISTRICT
                    SET D_YTD = D_YTD + ?
                  WHERE D_KEY = ?
+                         RETURNING D_STREET_1, D_STREET_2, D_CITY, D_STATE, D_ZIP, D_NAME
             </statement>
             <statement name="payGetDistSQL">
                 SELECT /*++ INDEX(DISTRICT, COLUMN D_KEY)*/ D_STREET_1, D_STREET_2, D_CITY, D_STATE, D_ZIP, D_NAME

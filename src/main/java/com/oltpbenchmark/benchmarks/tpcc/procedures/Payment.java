@@ -179,13 +179,17 @@ public class Payment extends TPCCProcedure {
 
     float paymentAmount = (float) (TPCCUtil.randomNumber(100, 500000, gen) / 100.0);
 
-    updateWarehouse(conn, w_id, paymentAmount);
-
-    Warehouse w = getWarehouse(conn, w_id);
-
-    updateDistrict(conn, w_id, districtID, paymentAmount);
-
-    District d = getDistrict(conn, w_id, districtID);
+    Warehouse w;
+    District d;
+    if (this.getDbType() == DatabaseType.REGATTA) {
+      w = updateWarehouseAndGet(conn, w_id, paymentAmount);
+      d = updateDistrictAndGet(conn, w_id, districtID, paymentAmount);
+    } else {
+      updateWarehouse(conn, w_id, paymentAmount);
+      w = getWarehouse(conn, w_id);
+      updateDistrict(conn, w_id, districtID, paymentAmount);
+      d = getDistrict(conn, w_id, districtID);
+    }
 
     int x = TPCCUtil.randomNumber(1, 100, gen);
 
@@ -373,6 +377,29 @@ public class Payment extends TPCCProcedure {
     }
   }
 
+  private Warehouse updateWarehouseAndGet(Connection conn, int w_id, float paymentAmount)
+      throws SQLException {
+    try (PreparedStatement payUpdateWhse = this.getPreparedStatement(conn, payUpdateWhseSQL)) {
+      payUpdateWhse.setBigDecimal(1, BigDecimal.valueOf(paymentAmount));
+      payUpdateWhse.setInt(2, w_id);
+
+      try (ResultSet rs = payUpdateWhse.executeQuery()) {
+        if (!rs.next()) {
+          throw new RuntimeException("W_ID=" + w_id + " not found!");
+        }
+
+        Warehouse w = new Warehouse();
+        w.w_street_1 = rs.getString("W_STREET_1");
+        w.w_street_2 = rs.getString("W_STREET_2");
+        w.w_city = rs.getString("W_CITY");
+        w.w_state = rs.getString("W_STATE");
+        w.w_zip = rs.getString("W_ZIP");
+        w.w_name = rs.getString("W_NAME");
+        return w;
+      }
+    }
+  }
+
   private Customer getCustomer(
       Connection conn,
       Random gen,
@@ -448,6 +475,29 @@ public class Payment extends TPCCProcedure {
         d.d_zip = rs.getString("D_ZIP");
         d.d_name = rs.getString("D_NAME");
 
+        return d;
+      }
+    }
+  }
+
+  private District updateDistrictAndGet(
+      Connection conn, int w_id, int districtID, float paymentAmount) throws SQLException {
+    try (PreparedStatement payUpdateDist = this.getPreparedStatement(conn, payUpdateDistSQL)) {
+      payUpdateDist.setBigDecimal(1, BigDecimal.valueOf(paymentAmount));
+      payUpdateDist.setLong(2, TPCCUtil.concatDistrictKey(w_id, districtID));
+
+      try (ResultSet rs = payUpdateDist.executeQuery()) {
+        if (!rs.next()) {
+          throw new RuntimeException("D_ID=" + districtID + " D_W_ID=" + w_id + " not found!");
+        }
+
+        District d = new District();
+        d.d_street_1 = rs.getString("D_STREET_1");
+        d.d_street_2 = rs.getString("D_STREET_2");
+        d.d_city = rs.getString("D_CITY");
+        d.d_state = rs.getString("D_STATE");
+        d.d_zip = rs.getString("D_ZIP");
+        d.d_name = rs.getString("D_NAME");
         return d;
       }
     }
