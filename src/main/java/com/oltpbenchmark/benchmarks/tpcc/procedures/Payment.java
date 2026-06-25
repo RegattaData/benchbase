@@ -134,7 +134,7 @@ public class Payment extends TPCCProcedure {
                      C_YTD_PAYMENT = C_YTD_PAYMENT + ?,
                      C_PAYMENT_CNT = C_PAYMENT_CNT + 1,
                      C_DATA = CASE
-                                WHEN C_CREDIT = 'BC' THEN SUBSTRING((? || C_DATA) FROM 1 FOR 500)
+                               WHEN C_CREDIT = 'BC' THEN LEFT(CONCAT(?, C_DATA), 500)
                                 ELSE C_DATA
                               END
                WHERE C_W_ID = ?
@@ -163,7 +163,7 @@ public class Payment extends TPCCProcedure {
                SET C_BALANCE = ?,
                  C_YTD_PAYMENT = ?,
                  C_PAYMENT_CNT = ?,
-                 C_DATA = SUBSTRING((C_ID || ? || C_DATA) FROM 1 FOR 500)
+                 C_DATA = LEFT(CONCAT(C_ID, ?, C_DATA), 500)
                WHERE ROWID = ?
             """
               .formatted(TPCCConstants.TABLENAME_CUSTOMER));
