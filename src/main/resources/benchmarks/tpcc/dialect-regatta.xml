@@ -127,6 +127,21 @@
                        C_PAYMENT_CNT = ?
                  WHERE C_KEY = ?
             </statement>
+            <statement name="payUpdateCustByIdReturningSQL">
+                UPDATE /*++ INDEX(CUSTOMER, COLUMN C_KEY)*/ CUSTOMER
+                   SET C_BALANCE = C_BALANCE - ?,
+                       C_YTD_PAYMENT = C_YTD_PAYMENT + ?,
+                       C_PAYMENT_CNT = C_PAYMENT_CNT + 1,
+                       C_DATA = CASE
+                                  WHEN C_CREDIT = 'BC' THEN SUBSTRING((? || C_DATA) FROM 1 FOR 500)
+                                  ELSE C_DATA
+                                END
+                 WHERE C_KEY = ?
+             RETURNING C_ID, C_FIRST, C_MIDDLE, C_LAST, C_STREET_1, C_STREET_2,
+                       C_CITY, C_STATE, C_ZIP, C_PHONE, C_CREDIT, C_CREDIT_LIM,
+                       C_DISCOUNT, C_BALANCE, C_YTD_PAYMENT, C_PAYMENT_CNT, C_SINCE,
+                       CASE WHEN C_CREDIT = 'BC' THEN C_DATA ELSE NULL END AS C_DATA
+            </statement>
             <statement name="payInsertHistSQL">
                 INSERT INTO HISTORY
                  (H_C_D_ID, H_C_W_ID, H_C_ID, H_D_ID, H_W_ID, H_DATE, H_AMOUNT, H_DATA, H_C_KEY)

@@ -126,6 +126,27 @@ public class Payment extends TPCCProcedure {
     """
               .formatted(TPCCConstants.TABLENAME_CUSTOMER));
 
+  public SQLStmt payUpdateCustByIdReturningSQL =
+      new SQLStmt(
+          """
+              UPDATE %s
+                 SET C_BALANCE = C_BALANCE - ?,
+                     C_YTD_PAYMENT = C_YTD_PAYMENT + ?,
+                     C_PAYMENT_CNT = C_PAYMENT_CNT + 1,
+                     C_DATA = CASE
+                                WHEN C_CREDIT = 'BC' THEN SUBSTRING((? || C_DATA) FROM 1 FOR 500)
+                                ELSE C_DATA
+                              END
+               WHERE C_W_ID = ?
+                 AND C_D_ID = ?
+                 AND C_ID = ?
+           RETURNING C_ID, C_FIRST, C_MIDDLE, C_LAST, C_STREET_1, C_STREET_2,
+                     C_CITY, C_STATE, C_ZIP, C_PHONE, C_CREDIT, C_CREDIT_LIM,
+                     C_DISCOUNT, C_BALANCE, C_YTD_PAYMENT, C_PAYMENT_CNT, C_SINCE,
+                     CASE WHEN C_CREDIT = 'BC' THEN C_DATA ELSE NULL END AS C_DATA
+          """
+              .formatted(TPCCConstants.TABLENAME_CUSTOMER));
+
   public SQLStmt payInsertHistSQL =
       new SQLStmt(
           """
@@ -183,27 +204,41 @@ public class Payment extends TPCCProcedure {
     // TPC-C 2.5.2.2: 60% by last name, 40% by customer id.
     boolean lookupByName = TPCCUtil.randomNumber(1, 100, gen) <= 60;
 
-    Customer c =
-        getCustomer(
-            conn,
-            gen,
-            customerDistrictID,
-            customerWarehouseID,
-            paymentAmount,
-            numWarehouses,
-            lookupByName);
-
-    if (c.c_credit.equals("BC")) {
-      // bad credit
-      c.c_data =
-          getCData(
-              conn, w_id, districtID, customerDistrictID, customerWarehouseID, paymentAmount, c);
-
-      updateBalanceCData(conn, customerDistrictID, customerWarehouseID, c);
-
+    Customer c;
+    if (this.getDbType() == DatabaseType.REGATTA && !lookupByName) {
+      int customerId = TPCCUtil.getCustomerID(gen);
+      c =
+          updateCustomerByIdReturning(
+              conn,
+              w_id,
+              districtID,
+              customerDistrictID,
+              customerWarehouseID,
+              customerId,
+              paymentAmount);
     } else {
-      // GoodCredit
-      updateBalance(conn, customerDistrictID, customerWarehouseID, c);
+      c =
+          getCustomer(
+              conn,
+              gen,
+              customerDistrictID,
+              customerWarehouseID,
+              paymentAmount,
+              numWarehouses,
+              lookupByName);
+
+      if (c.c_credit.equals("BC")) {
+        // bad credit
+        c.c_data =
+            getCData(
+                conn, w_id, districtID, customerDistrictID, customerWarehouseID, paymentAmount, c);
+
+        updateBalanceCData(conn, customerDistrictID, customerWarehouseID, c);
+
+      } else {
+        // GoodCredit
+        updateBalance(conn, customerDistrictID, customerWarehouseID, c);
+      }
     }
 
     insertHistory(
@@ -600,6 +635,57 @@ public class Payment extends TPCCProcedure {
                 + " C_D_ID="
                 + customerDistrictID
                 + " not found!");
+      }
+    }
+  }
+
+  private Customer updateCustomerByIdReturning(
+      Connection conn,
+      int w_id,
+      int districtID,
+      int customerDistrictID,
+      int customerWarehouseID,
+      int customerId,
+      float paymentAmount)
+      throws SQLException {
+    try (PreparedStatement payUpdateCust =
+        this.getPreparedStatement(conn, payUpdateCustByIdReturningSQL)) {
+      payUpdateCust.setDouble(1, paymentAmount);
+      payUpdateCust.setDouble(2, paymentAmount);
+      payUpdateCust.setString(
+          3,
+          customerId
+              + " "
+              + customerDistrictID
+              + " "
+              + customerWarehouseID
+              + " "
+              + districtID
+              + " "
+              + w_id
+              + " "
+              + paymentAmount
+              + " | ");
+      payUpdateCust.setLong(
+          4, TPCCUtil.concatCustomerKey(customerWarehouseID, customerDistrictID, customerId));
+
+      try (ResultSet rs = payUpdateCust.executeQuery()) {
+        if (!rs.next()) {
+          throw new RuntimeException(
+              "C_ID="
+                  + customerId
+                  + " C_W_ID="
+                  + customerWarehouseID
+                  + " C_D_ID="
+                  + customerDistrictID
+                  + " not found!");
+        }
+
+        Customer c = TPCCUtil.newCustomerFromResults(rs);
+        c.c_id = rs.getInt("C_ID");
+        c.c_last = rs.getString("C_LAST");
+        c.c_data = rs.getString("C_DATA");
+        return c;
       }
     }
   }
