@@ -112,6 +112,11 @@
                   FROM CUSTOMER
                  WHERE C_KEY = ?
             </statement>
+                        <statement name="payGetCustCdataByRowIdSQL">
+                                SELECT C_DATA
+                                    FROM CUSTOMER
+                                 WHERE ROWID = ?
+                        </statement>
             <statement name="payUpdateCustBalCdataSQL">
                 UPDATE /*++ INDEX(CUSTOMER, COLUMN C_KEY)*/ CUSTOMER
                    SET C_BALANCE = ?,
@@ -142,13 +147,28 @@
                        C_DISCOUNT, C_BALANCE, C_YTD_PAYMENT, C_PAYMENT_CNT, C_SINCE,
                        CASE WHEN C_CREDIT = 'BC' THEN C_DATA ELSE NULL END AS C_DATA
             </statement>
+            <statement name="payUpdateCustByRowIdCDataSQL">
+                UPDATE /*++ INDEX(CUSTOMER, COLUMN C_W_D_LAST_FIRST)*/ CUSTOMER
+                   SET C_BALANCE = ?,
+                       C_YTD_PAYMENT = ?,
+                       C_PAYMENT_CNT = ?,
+                       C_DATA = SUBSTRING((C_ID || ? || C_DATA) FROM 1 FOR 500)
+                 WHERE ROWID = ?
+            </statement>
+            <statement name="payUpdateCustByRowIdSQL">
+                UPDATE /*++ INDEX(CUSTOMER, COLUMN C_W_D_LAST_FIRST)*/ CUSTOMER
+                   SET C_BALANCE = ?,
+                       C_YTD_PAYMENT = ?,
+                       C_PAYMENT_CNT = ?
+                 WHERE ROWID = ?
+            </statement>
             <statement name="payInsertHistSQL">
                 INSERT INTO HISTORY
                  (H_C_D_ID, H_C_W_ID, H_C_ID, H_D_ID, H_W_ID, H_DATE, H_AMOUNT, H_DATA, H_C_KEY)
                  VALUES (?,?,?,?,?,?,?,?,?)
             </statement>
             <statement name="customerByNameSQL">
-                SELECT /*++ INDEX(CUSTOMER, COLUMN C_W_D_LAST_FIRST)*/ C_FIRST, C_MIDDLE, C_ID, C_STREET_1, C_STREET_2, C_CITY,
+                SELECT /*++ INDEX(CUSTOMER, COLUMN C_W_D_LAST_FIRST)*/ ROWID, C_FIRST, C_MIDDLE, C_ID, C_STREET_1, C_STREET_2, C_CITY,
                        C_STATE, C_ZIP, C_PHONE, C_CREDIT, C_CREDIT_LIM, C_DISCOUNT,
                        C_BALANCE, C_YTD_PAYMENT, C_PAYMENT_CNT, C_SINCE
                   FROM CUSTOMER

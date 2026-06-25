@@ -147,6 +147,38 @@ public class Payment extends TPCCProcedure {
           """
               .formatted(TPCCConstants.TABLENAME_CUSTOMER));
 
+  public SQLStmt payGetCustCdataByRowIdSQL =
+      new SQLStmt(
+          """
+              SELECT C_DATA
+              FROM %s
+               WHERE ROWID = ?
+          """
+              .formatted(TPCCConstants.TABLENAME_CUSTOMER));
+
+  public SQLStmt payUpdateCustByRowIdCDataSQL =
+      new SQLStmt(
+          """
+              UPDATE %s
+               SET C_BALANCE = ?,
+                 C_YTD_PAYMENT = ?,
+                 C_PAYMENT_CNT = ?,
+                 C_DATA = SUBSTRING((C_ID || ? || C_DATA) FROM 1 FOR 500)
+               WHERE ROWID = ?
+            """
+              .formatted(TPCCConstants.TABLENAME_CUSTOMER));
+
+  public SQLStmt payUpdateCustByRowIdSQL =
+      new SQLStmt(
+          """
+              UPDATE %s
+               SET C_BALANCE = ?,
+                 C_YTD_PAYMENT = ?,
+                 C_PAYMENT_CNT = ?
+               WHERE ROWID = ?
+            """
+              .formatted(TPCCConstants.TABLENAME_CUSTOMER));
+
   public SQLStmt payInsertHistSQL =
       new SQLStmt(
           """
@@ -205,17 +237,47 @@ public class Payment extends TPCCProcedure {
     boolean lookupByName = TPCCUtil.randomNumber(1, 100, gen) <= 60;
 
     Customer c;
-    if (this.getDbType() == DatabaseType.REGATTA && !lookupByName) {
-      int customerId = TPCCUtil.getCustomerID(gen);
-      c =
-          updateCustomerByIdReturning(
+    if (this.getDbType() == DatabaseType.REGATTA) {
+      if (lookupByName) {
+        CustomerByNameSelection customerSelection =
+            getCustomerByNameAndRowId(
+                customerWarehouseID,
+                customerDistrictID,
+                TPCCUtil.getNonUniformRandomLastNameForRun(gen),
+                numWarehouses,
+                conn);
+        c = customerSelection.customer;
+        c.c_balance -= paymentAmount;
+        c.c_ytd_payment += paymentAmount;
+        c.c_payment_cnt += 1;
+        if (c.c_credit.equals("BC")) {
+          updateCustomerByRowIdCData(
               conn,
               w_id,
               districtID,
               customerDistrictID,
               customerWarehouseID,
-              customerId,
-              paymentAmount);
+              customerSelection.rowId,
+              paymentAmount,
+              c);
+          if (LOG.isTraceEnabled()) {
+            c.c_data = getCustomerCDataByRowId(conn, customerSelection.rowId);
+          }
+        } else {
+          updateCustomerByRowId(conn, customerSelection.rowId, c);
+        }
+      } else {
+        int customerId = TPCCUtil.getCustomerID(gen);
+        c =
+            updateCustomerByIdReturning(
+                conn,
+                w_id,
+                districtID,
+                customerDistrictID,
+                customerWarehouseID,
+                customerId,
+                paymentAmount);
+      }
     } else {
       c =
           getCustomer(
@@ -690,6 +752,72 @@ public class Payment extends TPCCProcedure {
     }
   }
 
+  private void updateCustomerByRowId(Connection conn, long rowId, Customer c) throws SQLException {
+    try (PreparedStatement payUpdateCust =
+        this.getPreparedStatement(conn, payUpdateCustByRowIdSQL)) {
+      payUpdateCust.setDouble(1, c.c_balance);
+      payUpdateCust.setDouble(2, c.c_ytd_payment);
+      payUpdateCust.setInt(3, c.c_payment_cnt);
+      payUpdateCust.setLong(4, rowId);
+
+      int result = payUpdateCust.executeUpdate();
+      if (result == 0) {
+        throw new RuntimeException("ROWID=" + rowId + " not found!");
+      }
+    }
+  }
+
+  private void updateCustomerByRowIdCData(
+      Connection conn,
+      int w_id,
+      int districtID,
+      int customerDistrictID,
+      int customerWarehouseID,
+      long rowId,
+      float paymentAmount,
+      Customer c)
+      throws SQLException {
+    try (PreparedStatement payUpdateCust =
+        this.getPreparedStatement(conn, payUpdateCustByRowIdCDataSQL)) {
+      payUpdateCust.setDouble(1, c.c_balance);
+      payUpdateCust.setDouble(2, c.c_ytd_payment);
+      payUpdateCust.setInt(3, c.c_payment_cnt);
+      payUpdateCust.setString(
+          4,
+          " "
+              + customerDistrictID
+              + " "
+              + customerWarehouseID
+              + " "
+              + districtID
+              + " "
+              + w_id
+              + " "
+              + paymentAmount
+              + " | ");
+      payUpdateCust.setLong(5, rowId);
+
+      int result = payUpdateCust.executeUpdate();
+      if (result == 0) {
+        throw new RuntimeException("ROWID=" + rowId + " not found!");
+      }
+    }
+  }
+
+  private String getCustomerCDataByRowId(Connection conn, long rowId) throws SQLException {
+    try (PreparedStatement payGetCustCdata =
+        this.getPreparedStatement(conn, payGetCustCdataByRowIdSQL)) {
+      payGetCustCdata.setLong(1, rowId);
+
+      try (ResultSet rs = payGetCustCdata.executeQuery()) {
+        if (!rs.next()) {
+          throw new RuntimeException("ROWID=" + rowId + " not found!");
+        }
+        return rs.getString("C_DATA");
+      }
+    }
+  }
+
   private void insertHistory(
       Connection conn,
       int w_id,
@@ -764,20 +892,13 @@ public class Payment extends TPCCProcedure {
 
     try (PreparedStatement customerByName = this.getPreparedStatement(conn, customerByNameSQL)) {
       if (this.getDbType() == DatabaseType.REGATTA) {
-        int maxWarehouseDigits = Integer.toString(Math.max(numWarehouses, 1)).length();
-        customerByName.setString(
-            1,
-            TPCCUtil.customerNameLookupLowerBound(
-                c_w_id, c_d_id, customerLastName, maxWarehouseDigits));
-        customerByName.setString(
-            2,
-            TPCCUtil.customerNameLookupUpperBound(
-                c_w_id, c_d_id, customerLastName, maxWarehouseDigits));
-      } else {
-        customerByName.setInt(1, c_w_id);
-        customerByName.setInt(2, c_d_id);
-        customerByName.setString(3, customerLastName);
+        throw new IllegalStateException(
+            "getCustomerByName should not be used for Regatta payment-by-name");
       }
+      customerByName.setInt(1, c_w_id);
+      customerByName.setInt(2, c_d_id);
+      customerByName.setString(3, customerLastName);
+
       try (ResultSet rs = customerByName.executeQuery()) {
         if (LOG.isTraceEnabled()) {
           LOG.trace("C_LAST={} C_D_ID={} C_W_ID={}", customerLastName, c_d_id, c_w_id);
@@ -805,5 +926,61 @@ public class Payment extends TPCCProcedure {
       index -= 1;
     }
     return customers.get(index);
+  }
+
+  private CustomerByNameSelection getCustomerByNameAndRowId(
+      int c_w_id, int c_d_id, String customerLastName, int numWarehouses, Connection conn)
+      throws SQLException {
+    ArrayList<CustomerByNameSelection> customers = new ArrayList<>();
+
+    if (this.getDbType() != DatabaseType.REGATTA) {
+      throw new IllegalStateException("getCustomerByNameAndRowId is Regatta-only");
+    }
+
+    try (PreparedStatement customerByName = this.getPreparedStatement(conn, customerByNameSQL)) {
+      int maxWarehouseDigits = Integer.toString(Math.max(numWarehouses, 1)).length();
+      customerByName.setString(
+          1,
+          TPCCUtil.customerNameLookupLowerBound(
+              c_w_id, c_d_id, customerLastName, maxWarehouseDigits));
+      customerByName.setString(
+          2,
+          TPCCUtil.customerNameLookupUpperBound(
+              c_w_id, c_d_id, customerLastName, maxWarehouseDigits));
+
+      try (ResultSet rs = customerByName.executeQuery()) {
+        if (LOG.isTraceEnabled()) {
+          LOG.trace("C_LAST={} C_D_ID={} C_W_ID={}", customerLastName, c_d_id, c_w_id);
+        }
+
+        while (rs.next()) {
+          Customer c = TPCCUtil.newCustomerFromResults(rs);
+          c.c_id = rs.getInt("C_ID");
+          c.c_last = customerLastName;
+          customers.add(new CustomerByNameSelection(c, rs.getLong(1)));
+        }
+      }
+    }
+
+    if (customers.isEmpty()) {
+      throw new RuntimeException(
+          "C_LAST=" + customerLastName + " C_D_ID=" + c_d_id + " C_W_ID=" + c_w_id + " not found!");
+    }
+
+    int index = customers.size() / 2;
+    if (customers.size() % 2 == 0) {
+      index -= 1;
+    }
+    return customers.get(index);
+  }
+
+  private static final class CustomerByNameSelection {
+    private final Customer customer;
+    private final long rowId;
+
+    private CustomerByNameSelection(Customer customer, long rowId) {
+      this.customer = customer;
+      this.rowId = rowId;
+    }
   }
 }
