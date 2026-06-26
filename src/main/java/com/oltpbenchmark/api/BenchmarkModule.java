@@ -17,6 +17,7 @@ package com.oltpbenchmark.api;
 
 import com.oltpbenchmark.WorkloadConfiguration;
 import com.oltpbenchmark.catalog.AbstractCatalog;
+import com.oltpbenchmark.jdbc.LoggingConnection;
 import com.oltpbenchmark.types.DatabaseType;
 import com.oltpbenchmark.util.ClassUtil;
 import com.oltpbenchmark.util.FileUtil;
@@ -82,13 +83,15 @@ public abstract class BenchmarkModule {
   // --------------------------------------------------------------------------
 
   public final Connection makeConnection() throws SQLException {
-
+    Connection conn;
     if (StringUtils.isEmpty(workConf.getUsername())) {
-      return DriverManager.getConnection(workConf.getUrl());
+      conn = DriverManager.getConnection(workConf.getUrl());
     } else {
-      return DriverManager.getConnection(
-          workConf.getUrl(), workConf.getUsername(), workConf.getPassword());
+      conn =
+          DriverManager.getConnection(
+              workConf.getUrl(), workConf.getUsername(), workConf.getPassword());
     }
+    return LoggingConnection.wrap(conn);
   }
 
   private String afterLoadScriptPath = null;

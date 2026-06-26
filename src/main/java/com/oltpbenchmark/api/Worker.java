@@ -21,6 +21,7 @@ import static com.oltpbenchmark.types.State.MEASURE;
 
 import com.oltpbenchmark.*;
 import com.oltpbenchmark.api.Procedure.UserAbortException;
+import com.oltpbenchmark.jdbc.LoggingPreparedStatement;
 import com.oltpbenchmark.types.DatabaseType;
 import com.oltpbenchmark.types.State;
 import com.oltpbenchmark.types.TransactionStatus;
@@ -407,6 +408,9 @@ public abstract class Worker<T extends BenchmarkModule> implements Runnable {
       while (retryCount < maxRetryCount && this.workloadState.getGlobalState() != State.DONE) {
 
         TransactionStatus status = TransactionStatus.UNKNOWN;
+        boolean txnLoggingEnabled = LoggingPreparedStatement.isEnabled();
+        boolean txnLoggedStart = false;
+        boolean txnLoggedEnd = false;
 
         if (this.conn == null) {
           try {
@@ -437,6 +441,11 @@ public abstract class Worker<T extends BenchmarkModule> implements Runnable {
 
         try {
 
+          if (txnLoggingEnabled) {
+            LoggingPreparedStatement.logTxnStart(transactionType.getName());
+            txnLoggedStart = true;
+          }
+
           if (LOG.isDebugEnabled()) {
             LOG.debug(String.format("%s %s attempting...", this, transactionType));
           }
@@ -455,6 +464,11 @@ public abstract class Worker<T extends BenchmarkModule> implements Runnable {
 
           conn.commit();
 
+          if (txnLoggedStart && !txnLoggedEnd) {
+            LoggingPreparedStatement.logTxnEnd("TXN_COMMIT");
+            txnLoggedEnd = true;
+          }
+
           break;
 
         } catch (UserAbortException ex) {
@@ -466,6 +480,11 @@ public abstract class Worker<T extends BenchmarkModule> implements Runnable {
             conn = null;
           }
 
+          if (txnLoggedStart && !txnLoggedEnd) {
+            LoggingPreparedStatement.logTxnEnd("TXN_ROLLBACK");
+            txnLoggedEnd = true;
+          }
+
           ABORT_LOG.debug(String.format("%s Aborted", transactionType), ex);
 
           status = TransactionStatus.USER_ABORTED;
@@ -473,6 +492,11 @@ public abstract class Worker<T extends BenchmarkModule> implements Runnable {
           break;
 
         } catch (SQLException ex) {
+          if (txnLoggedStart && !txnLoggedEnd) {
+            LoggingPreparedStatement.logTxnEnd("TXN_ROLLBACK");
+            txnLoggedEnd = true;
+          }
+
           // check if we should attempt to ignore connection errors and reconnect
           boolean isConnectionErrorException = SQLUtil.isConnectionErrorException(ex);
 
