@@ -28,7 +28,11 @@ public class LoggingConnection implements Connection {
 
   @Override
   public java.sql.Statement createStatement() throws java.sql.SQLException {
-    return delegate.createStatement();
+    java.sql.Statement stmt = delegate.createStatement();
+    if (LoggingPreparedStatement.isEnabled() && !(stmt instanceof LoggingStatement)) {
+      return new LoggingStatement(stmt);
+    }
+    return stmt;
   }
 
   @Override
@@ -170,7 +174,11 @@ public class LoggingConnection implements Connection {
 
   @Override
   public java.sql.Statement createStatement(int arg0, int arg1) throws java.sql.SQLException {
-    return delegate.createStatement(arg0, arg1);
+    java.sql.Statement stmt = delegate.createStatement(arg0, arg1);
+    if (LoggingPreparedStatement.isEnabled() && !(stmt instanceof LoggingStatement)) {
+      return new LoggingStatement(stmt);
+    }
+    return stmt;
   }
 
   @Override
@@ -250,7 +258,11 @@ public class LoggingConnection implements Connection {
   @Override
   public java.sql.Statement createStatement(int arg0, int arg1, int arg2)
       throws java.sql.SQLException {
-    return delegate.createStatement(arg0, arg1, arg2);
+    java.sql.Statement stmt = delegate.createStatement(arg0, arg1, arg2);
+    if (LoggingPreparedStatement.isEnabled() && !(stmt instanceof LoggingStatement)) {
+      return new LoggingStatement(stmt);
+    }
+    return stmt;
   }
 
   @Override
