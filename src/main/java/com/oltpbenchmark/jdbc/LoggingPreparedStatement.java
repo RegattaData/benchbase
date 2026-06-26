@@ -55,11 +55,15 @@ import java.util.concurrent.atomic.AtomicLong;
  *
  * <p>Enable by passing the JVM property at runtime:
  *
- * <pre>  -Dbenchbase.querylog=/path/to/query_log.csv</pre>
+ * <pre>
+ *   -Dbenchbase.querylog=/path/to/query_log.csv
+ * </pre>
  *
  * <p>Log columns:
  *
- * <pre>  timestamp_ns, epoch_ms, worker_thread, txn_id, txn_type, event, duration_ns, sql</pre>
+ * <pre>
+ *   timestamp_ns, epoch_ms, worker_thread, txn_id, txn_type, event, duration_ns, sql, stmt_anlz_code
+ * </pre>
  *
  * <p>Events:
  *
@@ -108,7 +112,8 @@ public class LoggingPreparedStatement implements PreparedStatement {
       try {
         PrintWriter pw =
             new PrintWriter(new BufferedWriter(new FileWriter(filePath, false), 65536));
-        pw.println("timestamp_ns,epoch_ms,worker_thread,txn_id,txn_type,event,duration_ns,sql");
+        pw.println(
+            "timestamp_ns,epoch_ms,worker_thread,txn_id,txn_type,event,duration_ns,sql,stmt_anlz_code");
         pw.flush();
         logWriter = pw;
         enabled = true;
@@ -132,6 +137,14 @@ public class LoggingPreparedStatement implements PreparedStatement {
 
   public static boolean isEnabled() {
     return enabled;
+  }
+
+  static long getCurrentTxnId() {
+    return currentTxnId.get();
+  }
+
+  static String getCurrentTxnType() {
+    return currentTxnType.get();
   }
 
   // -------------------------------------------------------------------------
@@ -170,8 +183,10 @@ public class LoggingPreparedStatement implements PreparedStatement {
     String thread = Thread.currentThread().getName();
     long txnId = currentTxnId.get();
     String txnType = currentTxnType.get();
+    String stmtCode = RegattaStatementAnalyzerLogger.statementCodeFor(txnType, sql);
     // Escape for CSV: wrap sql in double-quotes, escape internal double-quotes
     String safeSql = "\"" + sql.replace("\"", "\"\"").replace("\n", " ").replace("\r", "") + "\"";
+    String safeStmtCode = "\"" + stmtCode.replace("\"", "\"\"") + "\"";
     String line =
         ns
             + ","
@@ -187,7 +202,9 @@ public class LoggingPreparedStatement implements PreparedStatement {
             + ","
             + durationNs
             + ","
-            + safeSql;
+            + safeSql
+            + ","
+            + safeStmtCode;
     synchronized (writerLock) {
       pw.println(line);
       pw.flush();
@@ -254,10 +271,26 @@ public class LoggingPreparedStatement implements PreparedStatement {
     writeEvent("QUERY_START", 0L, sql);
     try {
       ResultSet rs = delegate.executeQuery();
-      writeEvent("QUERY_END", System.nanoTime() - start, sql);
+      long duration = System.nanoTime() - start;
+      writeEvent("QUERY_END", duration, sql);
+      RegattaStatementAnalyzerLogger.capture(
+          delegate.getConnection(),
+          "QUERY_END",
+          duration,
+          sql,
+          getCurrentTxnId(),
+          getCurrentTxnType());
       return new LoggingResultSet(rs, sql);
     } catch (SQLException e) {
-      writeEvent("QUERY_ERROR", System.nanoTime() - start, sql);
+      long duration = System.nanoTime() - start;
+      writeEvent("QUERY_ERROR", duration, sql);
+      RegattaStatementAnalyzerLogger.capture(
+          delegate.getConnection(),
+          "QUERY_ERROR",
+          duration,
+          sql,
+          getCurrentTxnId(),
+          getCurrentTxnType());
       throw e;
     }
   }
@@ -269,10 +302,26 @@ public class LoggingPreparedStatement implements PreparedStatement {
     writeEvent("UPDATE_START", 0L, sql);
     try {
       int result = delegate.executeUpdate();
-      writeEvent("UPDATE_END", System.nanoTime() - start, sql);
+      long duration = System.nanoTime() - start;
+      writeEvent("UPDATE_END", duration, sql);
+      RegattaStatementAnalyzerLogger.capture(
+          delegate.getConnection(),
+          "UPDATE_END",
+          duration,
+          sql,
+          getCurrentTxnId(),
+          getCurrentTxnType());
       return result;
     } catch (SQLException e) {
-      writeEvent("UPDATE_ERROR", System.nanoTime() - start, sql);
+      long duration = System.nanoTime() - start;
+      writeEvent("UPDATE_ERROR", duration, sql);
+      RegattaStatementAnalyzerLogger.capture(
+          delegate.getConnection(),
+          "UPDATE_ERROR",
+          duration,
+          sql,
+          getCurrentTxnId(),
+          getCurrentTxnType());
       throw e;
     }
   }
@@ -284,10 +333,26 @@ public class LoggingPreparedStatement implements PreparedStatement {
     writeEvent("EXECUTE_START", 0L, sql);
     try {
       boolean result = delegate.execute();
-      writeEvent("EXECUTE_END", System.nanoTime() - start, sql);
+      long duration = System.nanoTime() - start;
+      writeEvent("EXECUTE_END", duration, sql);
+      RegattaStatementAnalyzerLogger.capture(
+          delegate.getConnection(),
+          "EXECUTE_END",
+          duration,
+          sql,
+          getCurrentTxnId(),
+          getCurrentTxnType());
       return result;
     } catch (SQLException e) {
-      writeEvent("EXECUTE_ERROR", System.nanoTime() - start, sql);
+      long duration = System.nanoTime() - start;
+      writeEvent("EXECUTE_ERROR", duration, sql);
+      RegattaStatementAnalyzerLogger.capture(
+          delegate.getConnection(),
+          "EXECUTE_ERROR",
+          duration,
+          sql,
+          getCurrentTxnId(),
+          getCurrentTxnType());
       throw e;
     }
   }
@@ -325,10 +390,26 @@ public class LoggingPreparedStatement implements PreparedStatement {
     writeEvent("UPDATE_START", 0L, sql);
     try {
       long result = delegate.executeLargeUpdate();
-      writeEvent("UPDATE_END", System.nanoTime() - start, sql);
+      long duration = System.nanoTime() - start;
+      writeEvent("UPDATE_END", duration, sql);
+      RegattaStatementAnalyzerLogger.capture(
+          delegate.getConnection(),
+          "UPDATE_END",
+          duration,
+          sql,
+          getCurrentTxnId(),
+          getCurrentTxnType());
       return result;
     } catch (SQLException e) {
-      writeEvent("UPDATE_ERROR", System.nanoTime() - start, sql);
+      long duration = System.nanoTime() - start;
+      writeEvent("UPDATE_ERROR", duration, sql);
+      RegattaStatementAnalyzerLogger.capture(
+          delegate.getConnection(),
+          "UPDATE_ERROR",
+          duration,
+          sql,
+          getCurrentTxnId(),
+          getCurrentTxnType());
       throw e;
     }
   }

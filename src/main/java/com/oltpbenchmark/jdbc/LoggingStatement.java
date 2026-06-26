@@ -21,10 +21,26 @@ public class LoggingStatement implements Statement {
     LoggingPreparedStatement.writeEventPublic("QUERY_START", 0L, sql);
     try {
       ResultSet rs = delegate.executeQuery(sql);
-      LoggingPreparedStatement.writeEventPublic("QUERY_END", System.nanoTime() - start, sql);
+      long duration = System.nanoTime() - start;
+      LoggingPreparedStatement.writeEventPublic("QUERY_END", duration, sql);
+      RegattaStatementAnalyzerLogger.capture(
+          delegate.getConnection(),
+          "QUERY_END",
+          duration,
+          sql,
+          LoggingPreparedStatement.getCurrentTxnId(),
+          LoggingPreparedStatement.getCurrentTxnType());
       return new LoggingResultSet(rs, sql);
     } catch (SQLException e) {
-      LoggingPreparedStatement.writeEventPublic("QUERY_ERROR", System.nanoTime() - start, sql);
+      long duration = System.nanoTime() - start;
+      LoggingPreparedStatement.writeEventPublic("QUERY_ERROR", duration, sql);
+      RegattaStatementAnalyzerLogger.capture(
+          delegate.getConnection(),
+          "QUERY_ERROR",
+          duration,
+          sql,
+          LoggingPreparedStatement.getCurrentTxnId(),
+          LoggingPreparedStatement.getCurrentTxnType());
       throw e;
     }
   }
@@ -35,10 +51,26 @@ public class LoggingStatement implements Statement {
     LoggingPreparedStatement.writeEventPublic("UPDATE_START", 0L, sql);
     try {
       int result = delegate.executeUpdate(sql);
-      LoggingPreparedStatement.writeEventPublic("UPDATE_END", System.nanoTime() - start, sql);
+      long duration = System.nanoTime() - start;
+      LoggingPreparedStatement.writeEventPublic("UPDATE_END", duration, sql);
+      RegattaStatementAnalyzerLogger.capture(
+          delegate.getConnection(),
+          "UPDATE_END",
+          duration,
+          sql,
+          LoggingPreparedStatement.getCurrentTxnId(),
+          LoggingPreparedStatement.getCurrentTxnType());
       return result;
     } catch (SQLException e) {
-      LoggingPreparedStatement.writeEventPublic("UPDATE_ERROR", System.nanoTime() - start, sql);
+      long duration = System.nanoTime() - start;
+      LoggingPreparedStatement.writeEventPublic("UPDATE_ERROR", duration, sql);
+      RegattaStatementAnalyzerLogger.capture(
+          delegate.getConnection(),
+          "UPDATE_ERROR",
+          duration,
+          sql,
+          LoggingPreparedStatement.getCurrentTxnId(),
+          LoggingPreparedStatement.getCurrentTxnType());
       throw e;
     }
   }
@@ -49,10 +81,26 @@ public class LoggingStatement implements Statement {
     LoggingPreparedStatement.writeEventPublic("EXECUTE_START", 0L, sql);
     try {
       boolean result = delegate.execute(sql);
-      LoggingPreparedStatement.writeEventPublic("EXECUTE_END", System.nanoTime() - start, sql);
+      long duration = System.nanoTime() - start;
+      LoggingPreparedStatement.writeEventPublic("EXECUTE_END", duration, sql);
+      RegattaStatementAnalyzerLogger.capture(
+          delegate.getConnection(),
+          "EXECUTE_END",
+          duration,
+          sql,
+          LoggingPreparedStatement.getCurrentTxnId(),
+          LoggingPreparedStatement.getCurrentTxnType());
       return result;
     } catch (SQLException e) {
-      LoggingPreparedStatement.writeEventPublic("EXECUTE_ERROR", System.nanoTime() - start, sql);
+      long duration = System.nanoTime() - start;
+      LoggingPreparedStatement.writeEventPublic("EXECUTE_ERROR", duration, sql);
+      RegattaStatementAnalyzerLogger.capture(
+          delegate.getConnection(),
+          "EXECUTE_ERROR",
+          duration,
+          sql,
+          LoggingPreparedStatement.getCurrentTxnId(),
+          LoggingPreparedStatement.getCurrentTxnType());
       throw e;
     }
   }
@@ -83,10 +131,26 @@ public class LoggingStatement implements Statement {
     LoggingPreparedStatement.writeEventPublic("UPDATE_START", 0L, sql);
     try {
       long result = delegate.executeLargeUpdate(sql);
-      LoggingPreparedStatement.writeEventPublic("UPDATE_END", System.nanoTime() - start, sql);
+      long duration = System.nanoTime() - start;
+      LoggingPreparedStatement.writeEventPublic("UPDATE_END", duration, sql);
+      RegattaStatementAnalyzerLogger.capture(
+          delegate.getConnection(),
+          "UPDATE_END",
+          duration,
+          sql,
+          LoggingPreparedStatement.getCurrentTxnId(),
+          LoggingPreparedStatement.getCurrentTxnType());
       return result;
     } catch (SQLException e) {
-      LoggingPreparedStatement.writeEventPublic("UPDATE_ERROR", System.nanoTime() - start, sql);
+      long duration = System.nanoTime() - start;
+      LoggingPreparedStatement.writeEventPublic("UPDATE_ERROR", duration, sql);
+      RegattaStatementAnalyzerLogger.capture(
+          delegate.getConnection(),
+          "UPDATE_ERROR",
+          duration,
+          sql,
+          LoggingPreparedStatement.getCurrentTxnId(),
+          LoggingPreparedStatement.getCurrentTxnType());
       throw e;
     }
   }

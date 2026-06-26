@@ -8,6 +8,7 @@ Expected input CSV columns:
 - sql
 - event
 - duration_ns
+- stmt_anlz_code (optional; derived if absent)
 
 Default output is XLSX. Optional CSV output can also be requested.
 
@@ -28,6 +29,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import hashlib
 import re
 from collections import defaultdict
 from dataclasses import dataclass, field
@@ -54,6 +56,7 @@ TXN_EVENTS = {
 
 OUTPUT_COLUMNS = [
     "txn_type",
+    "stmt_anlz_code",
     "statement_template",
     "example_statement",
     "event",
@@ -71,6 +74,7 @@ class Aggregator:
     combo_counts: Dict[Tuple[str, str, str], int] = field(default_factory=lambda: defaultdict(int))
     combo_duration_ns: Dict[Tuple[str, str, str], int] = field(default_factory=lambda: defaultdict(int))
     stmt_example_sql: Dict[Tuple[str, str], str] = field(default_factory=dict)
+    stmt_code_by_txn_type_stmt: Dict[Tuple[str, str], str] = field(default_factory=dict)
     txn_ids_by_type: Dict[str, Set[str]] = field(default_factory=lambda: defaultdict(set))
     stmt_occurrences_by_txn_type: Dict[Tuple[str, str], int] = field(
         default_factory=lambda: defaultdict(int)
@@ -84,6 +88,9 @@ class Aggregator:
 
         decoded_sql = decode_sql_field(row.get("sql") or "")
         template = normalize_sql_template(decoded_sql)
+        stmt_code = normalize_stmt_anlz_code(row.get("stmt_anlz_code") or "")
+        if not stmt_code:
+            stmt_code = derive_stmt_code(txn_type, template)
 
         combo_key = (txn_type, template, event)
         stmt_key = (txn_type, template)
@@ -91,6 +98,8 @@ class Aggregator:
         self.combo_counts[combo_key] += 1
         self.combo_duration_ns[combo_key] += duration_ns
         self.stmt_occurrences_by_txn_type[stmt_key] += 1
+        if stmt_code:
+            self.stmt_code_by_txn_type_stmt[stmt_key] = stmt_code
 
         current_example = self.stmt_example_sql.get(stmt_key)
         if current_example is None or sql_example_score(decoded_sql) > sql_example_score(current_example):
@@ -120,6 +129,7 @@ class Aggregator:
             rows.append(
                 {
                     "txn_type": txn_type,
+                    "stmt_anlz_code": self.stmt_code_by_txn_type_stmt.get(stmt_key, ""),
                     "statement_template": template,
                     "example_statement": self.stmt_example_sql.get(stmt_key, ""),
                     "event": event,
@@ -188,6 +198,14 @@ def parse_duration_ns(raw: str) -> int:
         return int(float(text))
 
 
+def derive_stmt_code(txn_type: str, statement_template: str) -> str:
+    safe_txn = re.sub(r"[^a-z0-9]+", "_", (txn_type or "unknown").lower()).strip("_")
+    if not safe_txn:
+        safe_txn = "unknown"
+    key = f"{txn_type}::{statement_template}"
+    suffix = hashlib.sha1(key.encode("utf-8")).hexdigest()[:10]
+    return f"{safe_txn}_{suffix}"
+
 def sql_example_score(sql: str) -> Tuple[int, int]:
     text = sql or ""
     has_literal = bool(re.search(r"\d|'.*?'", text))
@@ -202,16 +220,31 @@ def _split_csv_line_keep_tail(line: str, columns: int) -> List[str]:
     return parts
 
 
+def normalize_stmt_anlz_code(raw: str) -> str:
+    text = (raw or "").strip()
+    if not text:
+        return ""
+
+    # Legacy malformed rows may collapse sql and stmt_anlz_code into one CSV field.
+    try:
+        parsed = next(csv.reader([text]))
+        if parsed:
+            return parsed[-1].strip().strip('"')
+    except Exception:
+        pass
+
+    if "," in text:
+        return text.rsplit(",", 1)[-1].strip().strip('"')
+    return text.strip('"')
+
+
 def read_rows(path: str) -> Iterable[Dict[str, str]]:
     csv.field_size_limit(1024 * 1024 * 1024)
     required = {"txn_id", "txn_type", "sql", "event", "duration_ns"}
 
     with open(path, "r", newline="", encoding="utf-8") as f:
-        header_line = f.readline()
-        if not header_line:
-            raise ValueError("Input file has no header row.")
-
-        header = next(csv.reader([header_line]))
+        reader = csv.reader(f)
+        header = next(reader, None)
         if not header:
             raise ValueError("Input file has no header row.")
 
@@ -221,10 +254,13 @@ def read_rows(path: str) -> Iterable[Dict[str, str]]:
 
         cols = len(header)
 
-        for line in f:
-            if not line.strip():
+        for parts in reader:
+            if not parts:
                 continue
-            parts = _split_csv_line_keep_tail(line, cols)
+            if len(parts) < cols:
+                parts.extend([""] * (cols - len(parts)))
+            elif len(parts) > cols:
+                parts = parts[: cols - 1] + [",".join(parts[cols - 1 :])]
             yield dict(zip(header, parts))
 
 
