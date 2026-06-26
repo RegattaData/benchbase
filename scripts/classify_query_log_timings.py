@@ -30,7 +30,9 @@ from __future__ import annotations
 import argparse
 import csv
 import hashlib
+import os
 import re
+import sys
 from collections import defaultdict
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, Iterable, List, Optional, Set, Tuple
@@ -53,6 +55,10 @@ TXN_EVENTS = {
     "CONN_ROLLBACK",
     "CONN_CLOSE",
 }
+
+RDB_SOURCE_EVENTS = {"QUERY_END", "BATCH_END", "UPDATE_END"}
+RDB_PSEUDO_EVENT = "RDB_STMT_TIME"
+RDB_RUNTIME_TAG = "User-Client.Total-Run-Time"
 
 OUTPUT_COLUMNS = [
     "txn_type",
@@ -340,6 +346,103 @@ def write_csv(output_csv: str, rows: List[Dict[str, Any]]) -> None:
         writer.writerows(rows)
 
 
+def load_stmt_anlz_avg_duration_ns(stmt_anlz_dir: str) -> Dict[str, float]:
+    result: Dict[str, float] = {}
+    if not os.path.isdir(stmt_anlz_dir):
+        return result
+
+    suffix = "_summary.csv"
+    for name in os.listdir(stmt_anlz_dir):
+        if not name.endswith(suffix):
+            continue
+        stmt_code = name[: -len(suffix)]
+        csv_path = os.path.join(stmt_anlz_dir, name)
+        avg_ns = parse_stmt_summary_avg_duration_ns(csv_path)
+        if avg_ns is not None:
+            result[stmt_code] = avg_ns
+    return result
+
+
+def parse_stmt_summary_avg_duration_ns(csv_path: str) -> Optional[float]:
+    """Read *_summary.csv and return User-Client.Total-Run-Time avg converted by *1000."""
+    try:
+        with open(csv_path, "r", newline="", encoding="utf-8") as f:
+            reader = csv.reader(f)
+            rows = list(reader)
+    except OSError:
+        return None
+
+    header_idx = -1
+    tag_col = -1
+    avg_col = -1
+
+    for i, row in enumerate(rows):
+        lowered = [c.strip().lower() for c in row]
+        if "tag" in lowered and "avg" in lowered:
+            header_idx = i
+            tag_col = lowered.index("tag")
+            avg_col = lowered.index("avg")
+            break
+
+    if header_idx < 0:
+        return None
+
+    for row in rows[header_idx + 1 :]:
+        if tag_col >= len(row) or avg_col >= len(row):
+            continue
+        if row[tag_col].strip() != RDB_RUNTIME_TAG:
+            continue
+        raw_avg = row[avg_col].strip()
+        if not raw_avg:
+            return None
+        try:
+            # Requested conversion factor from stmt analyzer avg units.
+            return float(raw_avg) * 1000.0
+        except ValueError:
+            return None
+
+    return None
+
+
+def add_rdb_stmt_time_rows(
+    datasets: Dict[str, List[Dict[str, Any]]], stmt_avg_duration_ns: Dict[str, float]
+) -> Set[str]:
+    missing_codes: Set[str] = set()
+
+    for sheet_name, rows in datasets.items():
+        expanded: List[Dict[str, Any]] = []
+        for row in rows:
+            expanded.append(row)
+
+            event = str(row.get("event", "")).strip()
+            if event not in RDB_SOURCE_EVENTS:
+                continue
+
+            stmt_code = normalize_stmt_anlz_code(str(row.get("stmt_anlz_code", "")))
+            if not stmt_code:
+                continue
+
+            avg_duration_ns = stmt_avg_duration_ns.get(stmt_code)
+            if avg_duration_ns is None:
+                missing_codes.add(stmt_code)
+                continue
+
+            try:
+                combination_count = float(row.get("combination_count", 0) or 0)
+            except (TypeError, ValueError):
+                combination_count = 0.0
+
+            pseudo = dict(row)
+            pseudo["event"] = RDB_PSEUDO_EVENT
+            pseudo["avg_duration_ns"] = round(avg_duration_ns, 3)
+            pseudo["total_duration_ns"] = round(avg_duration_ns * combination_count, 3)
+            expanded.append(pseudo)
+
+        datasets[sheet_name] = expanded
+
+    return missing_codes
+
+
 def build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description=(
@@ -374,6 +477,15 @@ def build_arg_parser() -> argparse.ArgumentParser:
         default=None,
         help="Comma-separated event names to include when --events=custom",
     )
+    parser.add_argument(
+        "--stmt_anlz_dir",
+        default=None,
+        help=(
+            "Optional directory containing per-statement *_summary.csv files. "
+            "When provided, injects RDB_STMT_TIME pseudo-events using "
+            "User-Client.Total-Run-Time avg values."
+        ),
+    )
     return parser
 
 
@@ -388,6 +500,17 @@ def main() -> None:
     )
 
     datasets = classify(args.input_csv, args.events, args.include_events)
+
+    if args.stmt_anlz_dir:
+        stmt_avgs = load_stmt_anlz_avg_duration_ns(args.stmt_anlz_dir)
+        missing_codes = add_rdb_stmt_time_rows(datasets, stmt_avgs)
+        for stmt_code in sorted(missing_codes):
+            missing_path = os.path.join(args.stmt_anlz_dir, f"{stmt_code}_summary.csv")
+            print(
+                f"ERROR: missing summary CSV for stmt_anlz_code '{stmt_code}': {missing_path}",
+                file=sys.stderr,
+            )
+
     write_xlsx(output_xlsx, datasets)
     print(f"Wrote XLSX: {output_xlsx}")
 
