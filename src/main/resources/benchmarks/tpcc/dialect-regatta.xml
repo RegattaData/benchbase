@@ -175,6 +175,19 @@
                  WHERE C_W_D_LAST_FIRST BETWEEN ? AND ?
                  ORDER BY C_FIRST
             </statement>
+            <statement name="customerRowIdsByNameSQL">
+                SELECT /*++ INDEX(CUSTOMER, COLUMN C_W_D_LAST_FIRST)*/ ROWID
+                  FROM CUSTOMER
+                 WHERE C_W_D_LAST_FIRST BETWEEN ? AND ?
+                 ORDER BY C_W_D_LAST_FIRST
+            </statement>
+            <statement name="payGetCustFieldsByRowIdSQL">
+                SELECT C_FIRST, C_MIDDLE, C_ID, C_STREET_1, C_STREET_2, C_CITY,
+                       C_STATE, C_ZIP, C_PHONE, C_CREDIT, C_CREDIT_LIM, C_DISCOUNT,
+                       C_BALANCE, C_YTD_PAYMENT, C_PAYMENT_CNT, C_SINCE
+                  FROM CUSTOMER
+                 WHERE ROWID = ?
+            </statement>
         </procedure>
         <procedure name="OrderStatus">
             <statement name="payGetCustSQL">
@@ -202,6 +215,19 @@
                   FROM CUSTOMER
                  WHERE C_W_D_LAST_FIRST BETWEEN ? AND ?
                  ORDER BY C_FIRST
+            </statement>
+            <statement name="customerRowIdsByNameSQL">
+                SELECT /*++ INDEX(CUSTOMER, COLUMN C_W_D_LAST_FIRST)*/ ROWID
+                  FROM CUSTOMER
+                 WHERE C_W_D_LAST_FIRST BETWEEN ? AND ?
+                 ORDER BY C_W_D_LAST_FIRST
+            </statement>
+            <statement name="ordStatGetCustByRowIdSQL">
+                SELECT C_FIRST, C_MIDDLE, C_ID, C_STREET_1, C_STREET_2, C_CITY,
+                       C_STATE, C_ZIP, C_PHONE, C_CREDIT, C_CREDIT_LIM, C_DISCOUNT,
+                       C_BALANCE, C_YTD_PAYMENT, C_PAYMENT_CNT, C_SINCE
+                  FROM CUSTOMER
+                 WHERE ROWID = ?
             </statement>
         </procedure>
         <procedure name="Delivery">
