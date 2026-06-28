@@ -261,7 +261,7 @@
                 SELECT /*++ INDEX(STOCK, COLUMN S_W_I_KEY)*/ COUNT(*) AS STOCK_COUNT
                   FROM STOCK
                  WHERE S_W_I_KEY IN (
-                     SELECT /*++ INDEX(ORDER_LINE, COLUMN OL_O_KEY)*/ OL_W_I_KEY
+                     SELECT /*++ INDEX(ORDER_LINE, COLUMN OL_O_KEY)*/ ? + OL_I_ID
                        FROM ORDER_LINE
                       WHERE OL_O_KEY &lt; ?
                         AND OL_O_KEY >= ?

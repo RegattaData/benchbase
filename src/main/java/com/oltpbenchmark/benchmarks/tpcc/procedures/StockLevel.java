@@ -118,9 +118,13 @@ public class StockLevel extends TPCCProcedure {
         this.getPreparedStatement(conn, stockGetCountStockSQL)) {
       if (this.getDbType() == DatabaseType.REGATTA) {
         int lowerOId = Math.max(1, o_id - 20);
-        stockGetCountStock.setLong(1, TPCCUtil.concatOrderKey(w_id, d_id, o_id));
-        stockGetCountStock.setLong(2, TPCCUtil.concatOrderKey(w_id, d_id, lowerOId));
-        stockGetCountStock.setInt(3, threshold);
+        // Param 1: terminal warehouse base key; added to OL_I_ID in SQL to form
+        // the correct S_W_I_KEY = concat(terminal_w_id, item_id) without
+        // altering OL_W_I_KEY (which encodes supply warehouse and is used by CH).
+        stockGetCountStock.setLong(1, (long) w_id << 32);
+        stockGetCountStock.setLong(2, TPCCUtil.concatOrderKey(w_id, d_id, o_id));
+        stockGetCountStock.setLong(3, TPCCUtil.concatOrderKey(w_id, d_id, lowerOId));
+        stockGetCountStock.setInt(4, threshold);
       } else {
         stockGetCountStock.setInt(1, w_id);
         stockGetCountStock.setInt(2, d_id);
