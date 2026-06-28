@@ -60,6 +60,9 @@ RDB_SOURCE_EVENTS = {"QUERY_END", "BATCH_END", "UPDATE_END"}
 RDB_PSEUDO_EVENT = "RDB_STMT_TIME"
 RDB_RUNTIME_TAG = "User-Client.Total-Run-Time"
 
+TXN_TIME_PSEUDO_EVENT = "TXN_TIME"
+TXN_END_EVENTS = {"TXN_COMMIT", "TXN_ROLLBACK"}
+
 OUTPUT_COLUMNS = [
     "txn_type",
     "stmt_anlz_code",
@@ -404,6 +407,93 @@ def parse_stmt_summary_avg_duration_ns(csv_path: str) -> Optional[float]:
     return None
 
 
+def compute_txn_time_by_type(input_csv: str) -> Dict[str, Tuple[float, int]]:
+    """
+    Second pass over the CSV to compute wall-clock transaction duration per txn_type.
+
+    For each txn_id, elapsed time = timestamp_ns(TXN_COMMIT or TXN_ROLLBACK) −
+    timestamp_ns(TXN_START).  Each retry gets its own txn_id, so rollback
+    attempts are counted separately from commits.
+
+    Returns {txn_type: (total_duration_ns, attempt_count)}.
+    """
+    txn_start_ns: Dict[str, int] = {}    # txn_id -> TXN_START timestamp_ns
+    txn_type_by_id: Dict[str, str] = {}  # txn_id -> txn_type
+    total_ns: Dict[str, float] = defaultdict(float)
+    count: Dict[str, int] = defaultdict(int)
+
+    for row in read_rows(input_csv):
+        event = (row.get("event") or "").strip()
+        txn_id = (row.get("txn_id") or "").strip()
+        txn_type = (row.get("txn_type") or "").strip()
+        if not txn_id:
+            continue
+
+        if event == "TXN_START":
+            try:
+                ts = int((row.get("timestamp_ns") or "0").strip())
+            except ValueError:
+                ts = 0
+            txn_start_ns[txn_id] = ts
+            txn_type_by_id[txn_id] = txn_type
+
+        elif event in TXN_END_EVENTS:
+            if txn_id not in txn_start_ns:
+                continue
+            try:
+                ts = int((row.get("timestamp_ns") or "0").strip())
+            except ValueError:
+                continue
+            elapsed = ts - txn_start_ns.pop(txn_id)
+            t = txn_type_by_id.pop(txn_id, txn_type)
+            if elapsed >= 0:
+                total_ns[t] += elapsed
+                count[t] += 1
+
+    return {t: (total_ns[t], count[t]) for t in total_ns if count[t] > 0}
+
+
+def add_txn_time_rows(
+    datasets: Dict[str, List[Dict[str, Any]]],
+    txn_time_by_type: Dict[str, Tuple[float, int]],
+) -> None:
+    """
+    Inject TXN_TIME pseudo-event rows into sheets that carry transaction-level
+    events (txn_events, all_events; not sql_events).
+
+    Each row has statement_template="" and stmt_anlz_code="" because TXN_TIME
+    is a transaction-level aggregate, not a per-statement one.
+    combination_count reflects the number of transaction attempts (commits +
+    rollbacks) seen for that txn_type.
+    """
+    TXN_SHEET_NAMES = {"all_events", "txn_events"}
+
+    for sheet_name, rows in datasets.items():
+        # Include named txn sheets; for custom/other sheets check for txn rows.
+        if sheet_name not in TXN_SHEET_NAMES:
+            has_txn = any(str(r.get("event", "")).strip() in TXN_EVENTS for r in rows)
+            if not has_txn:
+                continue
+
+        for txn_type, (total, cnt) in sorted(txn_time_by_type.items()):
+            avg = total / cnt if cnt else 0.0
+            rows.append(
+                {
+                    "txn_type": txn_type,
+                    "stmt_anlz_code": "",
+                    "statement_template": "",
+                    "example_statement": "",
+                    "event": TXN_TIME_PSEUDO_EVENT,
+                    "combination_count": cnt,
+                    "total_duration_ns": round(total, 3),
+                    "avg_duration_ns": round(avg, 3),
+                    "txn_type_count": cnt,
+                    "statement_occurrence_count": cnt,
+                    "avg_statement_occurrences_per_txn": 1.0,
+                }
+            )
+
+
 def add_rdb_stmt_time_rows(
     datasets: Dict[str, List[Dict[str, Any]]], stmt_avg_duration_ns: Dict[str, float]
 ) -> Tuple[Set[str], Set[str]]:
@@ -509,6 +599,9 @@ def main() -> None:
     )
 
     datasets = classify(args.input_csv, args.events, args.include_events)
+
+    txn_times = compute_txn_time_by_type(args.input_csv)
+    add_txn_time_rows(datasets, txn_times)
 
     if args.stmt_anlz_dir:
         stmt_avgs = load_stmt_anlz_avg_duration_ns(args.stmt_anlz_dir)
