@@ -375,7 +375,15 @@ public class LoggingPreparedStatement implements PreparedStatement {
     writeEvent("BATCH_START", 0L, sqlTemplate);
     try {
       int[] result = delegate.executeBatch();
-      writeEvent("BATCH_END", System.nanoTime() - start, sqlTemplate);
+      long duration = System.nanoTime() - start;
+      writeEvent("BATCH_END", duration, sqlTemplate);
+      RegattaStatementAnalyzerLogger.capture(
+          delegate.getConnection(),
+          "BATCH_END",
+          duration,
+          sqlTemplate,
+          getCurrentTxnId(),
+          getCurrentTxnType());
       return result;
     } catch (SQLException e) {
       writeEvent("BATCH_ERROR", System.nanoTime() - start, sqlTemplate);
@@ -420,7 +428,15 @@ public class LoggingPreparedStatement implements PreparedStatement {
     writeEvent("BATCH_START", 0L, sqlTemplate);
     try {
       long[] result = delegate.executeLargeBatch();
-      writeEvent("BATCH_END", System.nanoTime() - start, sqlTemplate);
+      long duration = System.nanoTime() - start;
+      writeEvent("BATCH_END", duration, sqlTemplate);
+      RegattaStatementAnalyzerLogger.capture(
+          delegate.getConnection(),
+          "BATCH_END",
+          duration,
+          sqlTemplate,
+          getCurrentTxnId(),
+          getCurrentTxnType());
       return result;
     } catch (SQLException e) {
       writeEvent("BATCH_ERROR", System.nanoTime() - start, sqlTemplate);

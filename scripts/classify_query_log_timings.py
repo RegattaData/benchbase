@@ -406,8 +406,8 @@ def parse_stmt_summary_avg_duration_ns(csv_path: str) -> Optional[float]:
 
 def add_rdb_stmt_time_rows(
     datasets: Dict[str, List[Dict[str, Any]]], stmt_avg_duration_ns: Dict[str, float]
-) -> Set[str]:
-    missing_codes: Set[str] = set()
+) -> Tuple[Set[str], Set[str]]:
+    missing_events_by_code: Dict[str, Set[str]] = defaultdict(set)
 
     for sheet_name, rows in datasets.items():
         expanded: List[Dict[str, Any]] = []
@@ -424,7 +424,7 @@ def add_rdb_stmt_time_rows(
 
             avg_duration_ns = stmt_avg_duration_ns.get(stmt_code)
             if avg_duration_ns is None:
-                missing_codes.add(stmt_code)
+                missing_events_by_code[stmt_code].add(event)
                 continue
 
             try:
@@ -440,7 +440,16 @@ def add_rdb_stmt_time_rows(
 
         datasets[sheet_name] = expanded
 
-    return missing_codes
+    report_missing: Set[str] = set()
+    skipped_batch_only: Set[str] = set()
+    for stmt_code, events in missing_events_by_code.items():
+        # Current stmt_anlz capture does not generate analyzer artifacts for pure batch statements.
+        if events and events.issubset({"BATCH_END"}):
+            skipped_batch_only.add(stmt_code)
+            continue
+        report_missing.add(stmt_code)
+
+    return report_missing, skipped_batch_only
 
 
 def build_arg_parser() -> argparse.ArgumentParser:
@@ -503,11 +512,19 @@ def main() -> None:
 
     if args.stmt_anlz_dir:
         stmt_avgs = load_stmt_anlz_avg_duration_ns(args.stmt_anlz_dir)
-        missing_codes = add_rdb_stmt_time_rows(datasets, stmt_avgs)
+        missing_codes, skipped_batch_only = add_rdb_stmt_time_rows(datasets, stmt_avgs)
         for stmt_code in sorted(missing_codes):
             missing_path = os.path.join(args.stmt_anlz_dir, f"{stmt_code}_summary.csv")
             print(
                 f"ERROR: missing summary CSV for stmt_anlz_code '{stmt_code}': {missing_path}",
+                file=sys.stderr,
+            )
+        for stmt_code in sorted(skipped_batch_only):
+            print(
+                (
+                    "INFO: no summary CSV for batch-only stmt_anlz_code "
+                    f"'{stmt_code}' (BATCH_END has no stmt_anlz artifact)"
+                ),
                 file=sys.stderr,
             )
 

@@ -127,7 +127,10 @@ public final class RegattaStatementAnalyzerLogger {
     if (event == null) {
       return false;
     }
-    return "QUERY_END".equals(event) || "UPDATE_END".equals(event) || "EXECUTE_END".equals(event);
+    return "QUERY_END".equals(event)
+        || "UPDATE_END".equals(event)
+        || "EXECUTE_END".equals(event)
+        || "BATCH_END".equals(event);
   }
 
   private static Connection getOrResolveConnection(Connection conn) {
