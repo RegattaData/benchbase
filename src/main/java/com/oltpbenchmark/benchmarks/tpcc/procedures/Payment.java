@@ -202,6 +202,30 @@ public class Payment extends TPCCProcedure {
     """
               .formatted(TPCCConstants.TABLENAME_CUSTOMER));
 
+  // Regatta-only: range scan returning just ROWIDs in C_W_D_LAST_FIRST order.
+  public SQLStmt customerRowIdsByNameSQL =
+      new SQLStmt(
+          """
+              SELECT ROWID
+                FROM %s
+               WHERE C_W_D_LAST_FIRST >= ?
+                 AND C_W_D_LAST_FIRST < ?
+               ORDER BY C_W_D_LAST_FIRST
+          """
+              .formatted(TPCCConstants.TABLENAME_CUSTOMER));
+
+  // Regatta-only: fetch all customer fields by ROWID for the median candidate.
+  public SQLStmt payGetCustFieldsByRowIdSQL =
+      new SQLStmt(
+          """
+              SELECT C_FIRST, C_MIDDLE, C_ID, C_STREET_1, C_STREET_2, C_CITY,
+                     C_STATE, C_ZIP, C_PHONE, C_CREDIT, C_CREDIT_LIM, C_DISCOUNT,
+                     C_BALANCE, C_YTD_PAYMENT, C_PAYMENT_CNT, C_SINCE
+                FROM %s
+               WHERE ROWID = ?
+          """
+              .formatted(TPCCConstants.TABLENAME_CUSTOMER));
+
   public void run(
       Connection conn,
       Random gen,
@@ -931,47 +955,59 @@ public class Payment extends TPCCProcedure {
   private CustomerByNameSelection getCustomerByNameAndRowId(
       int c_w_id, int c_d_id, String customerLastName, int numWarehouses, Connection conn)
       throws SQLException {
-    ArrayList<CustomerByNameSelection> customers = new ArrayList<>();
 
     if (this.getDbType() != DatabaseType.REGATTA) {
       throw new IllegalStateException("getCustomerByNameAndRowId is Regatta-only");
     }
 
-    try (PreparedStatement customerByName = this.getPreparedStatement(conn, customerByNameSQL)) {
-      int maxWarehouseDigits = Integer.toString(Math.max(numWarehouses, 1)).length();
-      customerByName.setString(
-          1,
-          TPCCUtil.customerNameLookupLowerBound(
-              c_w_id, c_d_id, customerLastName, maxWarehouseDigits));
-      customerByName.setString(
-          2,
-          TPCCUtil.customerNameLookupUpperBound(
-              c_w_id, c_d_id, customerLastName, maxWarehouseDigits));
+    int maxWarehouseDigits = Integer.toString(Math.max(numWarehouses, 1)).length();
+    String lowerBound =
+        TPCCUtil.customerNameLookupLowerBound(c_w_id, c_d_id, customerLastName, maxWarehouseDigits);
+    String upperBound =
+        TPCCUtil.customerNameLookupUpperBound(c_w_id, c_d_id, customerLastName, maxWarehouseDigits);
 
-      try (ResultSet rs = customerByName.executeQuery()) {
-        if (LOG.isTraceEnabled()) {
-          LOG.trace("C_LAST={} C_D_ID={} C_W_ID={}", customerLastName, c_d_id, c_w_id);
-        }
+    if (LOG.isTraceEnabled()) {
+      LOG.trace("C_LAST={} C_D_ID={} C_W_ID={}", customerLastName, c_d_id, c_w_id);
+    }
 
+    // Phase 1: collect ROWIDs in C_W_D_LAST_FIRST (C_FIRST) order; transmit only
+    // the key.
+    ArrayList<Long> rowIds = new ArrayList<>();
+    try (PreparedStatement stmt = this.getPreparedStatement(conn, customerRowIdsByNameSQL)) {
+      stmt.setString(1, lowerBound);
+      stmt.setString(2, upperBound);
+      try (ResultSet rs = stmt.executeQuery()) {
         while (rs.next()) {
-          Customer c = TPCCUtil.newCustomerFromResults(rs);
-          c.c_id = rs.getInt("C_ID");
-          c.c_last = customerLastName;
-          customers.add(new CustomerByNameSelection(c, rs.getLong(1)));
+          rowIds.add(rs.getLong(1));
         }
       }
     }
 
-    if (customers.isEmpty()) {
+    if (rowIds.isEmpty()) {
       throw new RuntimeException(
           "C_LAST=" + customerLastName + " C_D_ID=" + c_d_id + " C_W_ID=" + c_w_id + " not found!");
     }
 
-    int index = customers.size() / 2;
-    if (customers.size() % 2 == 0) {
-      index -= 1;
+    // TPC-C 2.5.2.2: Position n/2 rounded up (counting from 1), i.e. 0-based index:
+    int medianIndex = rowIds.size() / 2;
+    if (rowIds.size() % 2 == 0) {
+      medianIndex -= 1;
     }
-    return customers.get(index);
+    long medianRowId = rowIds.get(medianIndex);
+
+    // Phase 2: fetch all customer fields for the median ROWID only.
+    try (PreparedStatement stmt = this.getPreparedStatement(conn, payGetCustFieldsByRowIdSQL)) {
+      stmt.setLong(1, medianRowId);
+      try (ResultSet rs = stmt.executeQuery()) {
+        if (!rs.next()) {
+          throw new RuntimeException("ROWID=" + medianRowId + " not found!");
+        }
+        Customer c = TPCCUtil.newCustomerFromResults(rs);
+        c.c_id = rs.getInt("C_ID");
+        c.c_last = customerLastName;
+        return new CustomerByNameSelection(c, medianRowId);
+      }
+    }
   }
 
   private static final class CustomerByNameSelection {

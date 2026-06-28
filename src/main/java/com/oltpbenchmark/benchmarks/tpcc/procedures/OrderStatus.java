@@ -88,6 +88,30 @@ public class OrderStatus extends TPCCProcedure {
     """
               .formatted(TPCCConstants.TABLENAME_CUSTOMER));
 
+  // Regatta-only: range scan returning just ROWIDs in C_W_D_LAST_FIRST order.
+  public SQLStmt customerRowIdsByNameSQL =
+      new SQLStmt(
+          """
+              SELECT ROWID
+                FROM %s
+               WHERE C_W_D_LAST_FIRST >= ?
+                 AND C_W_D_LAST_FIRST < ?
+               ORDER BY C_W_D_LAST_FIRST
+          """
+              .formatted(TPCCConstants.TABLENAME_CUSTOMER));
+
+  // Regatta-only: fetch all customer fields by ROWID for the median candidate.
+  public SQLStmt ordStatGetCustByRowIdSQL =
+      new SQLStmt(
+          """
+              SELECT C_FIRST, C_MIDDLE, C_ID, C_STREET_1, C_STREET_2, C_CITY,
+                     C_STATE, C_ZIP, C_PHONE, C_CREDIT, C_CREDIT_LIM, C_DISCOUNT,
+                     C_BALANCE, C_YTD_PAYMENT, C_PAYMENT_CNT, C_SINCE
+                FROM %s
+               WHERE ROWID = ?
+          """
+              .formatted(TPCCConstants.TABLENAME_CUSTOMER));
+
   public void run(
       Connection conn,
       Random gen,
@@ -295,20 +319,63 @@ public class OrderStatus extends TPCCProcedure {
   public Customer getCustomerByName(
       int c_w_id, int c_d_id, String c_last, int numWarehouses, Connection conn)
       throws SQLException {
+
+    if (this.getDbType() == DatabaseType.REGATTA) {
+      int maxWarehouseDigits = Integer.toString(Math.max(numWarehouses, 1)).length();
+      String lowerBound =
+          TPCCUtil.customerNameLookupLowerBound(c_w_id, c_d_id, c_last, maxWarehouseDigits);
+      String upperBound =
+          TPCCUtil.customerNameLookupUpperBound(c_w_id, c_d_id, c_last, maxWarehouseDigits);
+
+      // Phase 1: collect ROWIDs in C_W_D_LAST_FIRST (C_FIRST) order; transmit only
+      // the key.
+      ArrayList<Long> rowIds = new ArrayList<>();
+      try (PreparedStatement stmt = this.getPreparedStatement(conn, customerRowIdsByNameSQL)) {
+        stmt.setString(1, lowerBound);
+        stmt.setString(2, upperBound);
+        try (ResultSet rs = stmt.executeQuery()) {
+          while (rs.next()) {
+            rowIds.add(rs.getLong(1));
+          }
+        }
+      }
+
+      if (rowIds.isEmpty()) {
+        String msg =
+            String.format(
+                "Failed to get CUSTOMER [C_W_ID=%d, C_D_ID=%d, C_LAST=%s]", c_w_id, c_d_id, c_last);
+        throw new RuntimeException(msg);
+      }
+
+      // TPC-C 2.5.2.2: Position n/2 rounded up (counting from 1), i.e. 0-based index:
+      int medianIndex = rowIds.size() / 2;
+      if (rowIds.size() % 2 == 0) {
+        medianIndex -= 1;
+      }
+      long medianRowId = rowIds.get(medianIndex);
+
+      // Phase 2: fetch all customer fields for the median ROWID only.
+      try (PreparedStatement stmt = this.getPreparedStatement(conn, ordStatGetCustByRowIdSQL)) {
+        stmt.setLong(1, medianRowId);
+        try (ResultSet rs = stmt.executeQuery()) {
+          if (!rs.next()) {
+            throw new RuntimeException("ROWID=" + medianRowId + " not found!");
+          }
+          Customer c = TPCCUtil.newCustomerFromResults(rs);
+          c.c_id = rs.getInt("C_ID");
+          c.c_last = c_last;
+          return c;
+        }
+      }
+    }
+
+    // Non-Regatta path.
     ArrayList<Customer> customers = new ArrayList<>();
 
     try (PreparedStatement customerByName = this.getPreparedStatement(conn, customerByNameSQL)) {
-      if (this.getDbType() == DatabaseType.REGATTA) {
-        int maxWarehouseDigits = Integer.toString(Math.max(numWarehouses, 1)).length();
-        customerByName.setString(
-            1, TPCCUtil.customerNameLookupLowerBound(c_w_id, c_d_id, c_last, maxWarehouseDigits));
-        customerByName.setString(
-            2, TPCCUtil.customerNameLookupUpperBound(c_w_id, c_d_id, c_last, maxWarehouseDigits));
-      } else {
-        customerByName.setInt(1, c_w_id);
-        customerByName.setInt(2, c_d_id);
-        customerByName.setString(3, c_last);
-      }
+      customerByName.setInt(1, c_w_id);
+      customerByName.setInt(2, c_d_id);
+      customerByName.setString(3, c_last);
 
       try (ResultSet rs = customerByName.executeQuery()) {
         while (rs.next()) {
