@@ -23,9 +23,24 @@ import java.util.Map;
 /**
  * Captures Regatta statement-analyzer output into per-query JSON and summary CSV files.
  *
+ * <p>Activated by setting the JVM property {@code -Dbenchbase.stmt_anlz} (any value except
+ * {@code false}). Query logging ({@code -Dbenchbase.querylog}) must also be enabled.
+ *
  * <p>Files are written under: {@code ./benchbase_stmt_anlz_yyyyMMdd_HHmmss}
  */
 public final class RegattaStatementAnalyzerLogger {
+
+  /** JVM property that enables the statement analyzer. */
+  public static final String SYSPROP = "benchbase.stmt_anlz";
+
+  /**
+   * Returns {@code true} when {@code -Dbenchbase.stmt_anlz} is set to any value other than
+   * {@code "false"}. Query logging must also be active for captures to proceed.
+   */
+  public static boolean isEnabled() {
+    String val = System.getProperty(SYSPROP);
+    return val != null && !val.equalsIgnoreCase("false");
+  }
 
   private static final DateTimeFormatter DIR_TS_FMT =
       DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss");
@@ -67,7 +82,8 @@ public final class RegattaStatementAnalyzerLogger {
 
   public static void capture(
       Connection conn, String event, long durationNs, String sql, long txnId, String txnType) {
-    if (!LoggingPreparedStatement.isEnabled()
+    if (!isEnabled()
+        || !LoggingPreparedStatement.isEnabled()
         || conn == null
         || sql == null
         || sql.isBlank()
