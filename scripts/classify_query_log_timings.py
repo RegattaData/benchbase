@@ -65,7 +65,7 @@ TXN_END_EVENTS = {"TXN_COMMIT", "TXN_ROLLBACK"}
 
 OUTPUT_COLUMNS = [
     "txn_type",
-    "stmt_anlz_code",
+    "stmt_id",
     "statement_template",
     "example_statement",
     "event",
@@ -75,6 +75,20 @@ OUTPUT_COLUMNS = [
     "txn_type_count",
     "statement_occurrence_count",
     "avg_statement_occurrences_per_txn",
+]
+
+# Columns for the driver_attribution tab (one row per stmt_id).
+ATTRIBUTION_COLUMNS = [
+    "stmt_id",
+    "txn_type",
+    "statement_template",
+    "exec_event",
+    "exec_count",
+    "QUERY_END_avg_ns",
+    "RDB_STMT_TIME_avg_ns",
+    "driver_overhead_ns",
+    "rs_time_per_exec_ns",
+    "rs_get_string_per_exec_ns",
 ]
 
 
@@ -138,7 +152,7 @@ class Aggregator:
             rows.append(
                 {
                     "txn_type": txn_type,
-                    "stmt_anlz_code": self.stmt_code_by_txn_type_stmt.get(stmt_key, ""),
+                    "stmt_id": self.stmt_code_by_txn_type_stmt.get(stmt_key, ""),
                     "statement_template": template,
                     "example_statement": self.stmt_example_sql.get(stmt_key, ""),
                     "event": event,
@@ -321,7 +335,11 @@ def classify(input_csv: str, events_mode: str, include_events: Optional[str]) ->
     return {sheet: agg.to_rows() for sheet, (agg, _pred) in aggregators.items()}
 
 
-def write_xlsx(output_xlsx: str, datasets: Dict[str, List[Dict[str, Any]]]) -> None:
+def write_xlsx(
+    output_xlsx: str,
+    datasets: Dict[str, List[Dict[str, Any]]],
+    column_overrides: Optional[Dict[str, List[str]]] = None,
+) -> None:
     try:
         from openpyxl import Workbook
     except ImportError as exc:
@@ -335,9 +353,10 @@ def write_xlsx(output_xlsx: str, datasets: Dict[str, List[Dict[str, Any]]]) -> N
 
     for sheet_name, rows in datasets.items():
         ws = wb.create_sheet(title=sheet_name[:31])
-        ws.append(OUTPUT_COLUMNS)
+        cols = (column_overrides or {}).get(sheet_name, OUTPUT_COLUMNS)
+        ws.append(cols)
         for row in rows:
-            ws.append([row.get(col, "") for col in OUTPUT_COLUMNS])
+            ws.append([row.get(col, "") for col in cols])
 
     wb.save(output_xlsx)
 
@@ -480,7 +499,7 @@ def add_txn_time_rows(
             rows.append(
                 {
                     "txn_type": txn_type,
-                    "stmt_anlz_code": "",
+                    "stmt_id": "",
                     "statement_template": "",
                     "example_statement": "",
                     "event": TXN_TIME_PSEUDO_EVENT,
@@ -492,6 +511,100 @@ def add_txn_time_rows(
                     "avg_statement_occurrences_per_txn": 1.0,
                 }
             )
+
+
+def build_driver_attribution_rows(
+    datasets: Dict[str, List[Dict[str, Any]]]
+) -> List[Dict[str, Any]]:
+    """
+    Build one row per stmt_anlz_code summarising how time is attributed across
+    the driver and the Regatta server.
+
+    Reads from the sql_events sheet (which already has RDB_STMT_TIME injected)
+    or falls back to all_events.
+
+    Column meanings
+    ---------------
+    QUERY_END_avg_ns     Avg duration of the execution-end event (QUERY_END /
+                         UPDATE_END / BATCH_END) per call.  This is the total
+                         round-trip time as seen by the JDBC layer: network +
+                         server processing + driver overhead.
+    RDB_STMT_TIME_avg_ns Avg server-side processing time from the stmt analyzer
+                         (blank when --stmt_anlz_dir was not supplied).
+    driver_overhead_ns   QUERY_END_avg_ns - RDB_STMT_TIME_avg_ns: network RTT +
+                         driver serialisation/deserialisation within the call.
+    rs_time_per_exec_ns  sum(RS_*.total_ns) / exec_count: result-set reading
+                         time that falls outside QUERY_END (lazy row fetching,
+                         cursor close, column getters).
+    """
+    source = datasets.get("sql_events") or datasets.get("all_events", [])
+    if not source:
+        return []
+
+    exec_total: Dict[str, float] = defaultdict(float)
+    exec_count_map: Dict[str, int] = defaultdict(int)
+    exec_event_name: Dict[str, str] = {}
+    rdb_total: Dict[str, float] = defaultdict(float)
+    rdb_count_map: Dict[str, int] = defaultdict(int)
+    rs_total: Dict[str, float] = defaultdict(float)
+    rs_get_string_total: Dict[str, float] = defaultdict(float)
+    seen_txn_types: Dict[str, Set[str]] = defaultdict(set)
+    seen_templates: Dict[str, str] = {}
+
+    for row in source:
+        code = str(row.get("stmt_id") or "").strip()
+        if not code:
+            continue
+        event = str(row.get("event") or "").strip()
+        try:
+            count = int(float(row.get("combination_count") or 0))
+            total_ns = float(row.get("total_duration_ns") or 0)
+        except (TypeError, ValueError):
+            continue
+
+        seen_txn_types[code].add(str(row.get("txn_type") or ""))
+        if code not in seen_templates:
+            seen_templates[code] = str(row.get("statement_template") or "")
+
+        if event in RDB_SOURCE_EVENTS:
+            exec_total[code] += total_ns
+            exec_count_map[code] += count
+            exec_event_name[code] = event
+        elif event == RDB_PSEUDO_EVENT:
+            rdb_total[code] += total_ns
+            rdb_count_map[code] += count
+        elif event.startswith("RS_"):
+            rs_total[code] += total_ns
+            if event == "RS_GET_STRING":
+                rs_get_string_total[code] += total_ns
+
+    rows: List[Dict[str, Any]] = []
+    for code in sorted(exec_count_map.keys()):
+        n = exec_count_map[code]
+        exec_avg = exec_total[code] / n if n else 0.0
+
+        rdb_n = rdb_count_map[code]
+        rdb_avg: Optional[float] = rdb_total[code] / rdb_n if rdb_n else None
+        driver_ns: Any = round(exec_avg - rdb_avg, 1) if rdb_avg is not None else ""
+        rs_per_exec = rs_total.get(code, 0.0) / n if n else 0.0
+        rs_get_string_per_exec = rs_get_string_total.get(code, 0.0) / n if n else 0.0
+
+        txn_type_str = ", ".join(sorted(seen_txn_types[code] - {""})) or ""
+        rows.append(
+            {
+                "stmt_id": code,
+                "txn_type": txn_type_str,
+                "statement_template": seen_templates.get(code, ""),
+                "exec_event": exec_event_name.get(code, ""),
+                "exec_count": n,
+                "QUERY_END_avg_ns": round(exec_avg, 1),
+                "RDB_STMT_TIME_avg_ns": round(rdb_avg, 1) if rdb_avg is not None else "",
+                "driver_overhead_ns": driver_ns,
+                "rs_time_per_exec_ns": round(rs_per_exec, 1),
+                "rs_get_string_per_exec_ns": round(rs_get_string_per_exec, 1),
+            }
+        )
+    return rows
 
 
 def add_rdb_stmt_time_rows(
@@ -508,7 +621,7 @@ def add_rdb_stmt_time_rows(
             if event not in RDB_SOURCE_EVENTS:
                 continue
 
-            stmt_code = normalize_stmt_anlz_code(str(row.get("stmt_anlz_code", "")))
+            stmt_code = normalize_stmt_anlz_code(str(row.get("stmt_id", "")))
             if not stmt_code:
                 continue
 
@@ -621,7 +734,16 @@ def main() -> None:
                 file=sys.stderr,
             )
 
-    write_xlsx(output_xlsx, datasets)
+    # Build driver-attribution tab after all pseudo-events have been injected.
+    attr_rows = build_driver_attribution_rows(datasets)
+    if attr_rows:
+        datasets["driver_attribution"] = attr_rows
+
+    write_xlsx(
+        output_xlsx,
+        datasets,
+        column_overrides={"driver_attribution": ATTRIBUTION_COLUMNS},
+    )
     print(f"Wrote XLSX: {output_xlsx}")
 
     if args.output_csv:
