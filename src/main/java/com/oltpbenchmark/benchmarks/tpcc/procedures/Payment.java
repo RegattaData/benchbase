@@ -489,13 +489,15 @@ public class Payment extends TPCCProcedure {
           throw new RuntimeException("W_ID=" + w_id + " not found!");
         }
 
+        // Regatta payUpdateWhseSQL RETURNING order: W_STREET_1=1, W_STREET_2=2,
+        // W_CITY=3, W_STATE=4, W_ZIP=5, W_NAME=6 (dialect-regatta.xml).
         Warehouse w = new Warehouse();
-        w.w_street_1 = rs.getString("W_STREET_1");
-        w.w_street_2 = rs.getString("W_STREET_2");
-        w.w_city = rs.getString("W_CITY");
-        w.w_state = rs.getString("W_STATE");
-        w.w_zip = rs.getString("W_ZIP");
-        w.w_name = rs.getString("W_NAME");
+        w.w_street_1 = rs.getString(1);
+        w.w_street_2 = rs.getString(2);
+        w.w_city = rs.getString(3);
+        w.w_state = rs.getString(4);
+        w.w_zip = rs.getString(5);
+        w.w_name = rs.getString(6);
         return w;
       }
     }
@@ -592,13 +594,15 @@ public class Payment extends TPCCProcedure {
           throw new RuntimeException("D_ID=" + districtID + " D_W_ID=" + w_id + " not found!");
         }
 
+        // Regatta payUpdateDistSQL RETURNING order: D_STREET_1=1, D_STREET_2=2,
+        // D_CITY=3, D_STATE=4, D_ZIP=5, D_NAME=6 (dialect-regatta.xml).
         District d = new District();
-        d.d_street_1 = rs.getString("D_STREET_1");
-        d.d_street_2 = rs.getString("D_STREET_2");
-        d.d_city = rs.getString("D_CITY");
-        d.d_state = rs.getString("D_STATE");
-        d.d_zip = rs.getString("D_ZIP");
-        d.d_name = rs.getString("D_NAME");
+        d.d_street_1 = rs.getString(1);
+        d.d_street_2 = rs.getString(2);
+        d.d_city = rs.getString(3);
+        d.d_state = rs.getString(4);
+        d.d_zip = rs.getString(5);
+        d.d_name = rs.getString(6);
         return d;
       }
     }
@@ -635,7 +639,12 @@ public class Payment extends TPCCProcedure {
                   + customerDistrictID
                   + " not found!");
         }
-        c_data = rs.getString("C_DATA");
+        if (this.getDbType() == DatabaseType.REGATTA) {
+          // Regatta payGetCustCdataSQL: C_DATA=1.
+          c_data = rs.getString(1);
+        } else {
+          c_data = rs.getString("C_DATA");
+        }
       }
 
       c_data =
@@ -767,10 +776,29 @@ public class Payment extends TPCCProcedure {
                   + " not found!");
         }
 
-        Customer c = TPCCUtil.newCustomerFromResults(rs);
-        c.c_id = rs.getInt("C_ID");
-        c.c_last = rs.getString("C_LAST");
-        c.c_data = rs.getString("C_DATA");
+        // Regatta payUpdateCustByIdReturningSQL RETURNING order: C_ID=1, C_FIRST=2,
+        // C_MIDDLE=3, C_LAST=4, C_STREET_1=5, C_STREET_2=6, C_CITY=7, C_STATE=8,
+        // C_ZIP=9, C_PHONE=10, C_CREDIT=11, C_CREDIT_LIM=12, C_DISCOUNT=13,
+        // C_BALANCE=14, C_YTD_PAYMENT=15, C_PAYMENT_CNT=16, C_SINCE=17, C_DATA=18.
+        Customer c = new Customer();
+        c.c_id = rs.getInt(1);
+        c.c_first = rs.getString(2);
+        c.c_middle = rs.getString(3);
+        c.c_last = rs.getString(4);
+        c.c_street_1 = rs.getString(5);
+        c.c_street_2 = rs.getString(6);
+        c.c_city = rs.getString(7);
+        c.c_state = rs.getString(8);
+        c.c_zip = rs.getString(9);
+        c.c_phone = rs.getString(10);
+        c.c_credit = rs.getString(11);
+        c.c_credit_lim = rs.getFloat(12);
+        c.c_discount = rs.getFloat(13);
+        c.c_balance = rs.getFloat(14);
+        c.c_ytd_payment = rs.getFloat(15);
+        c.c_payment_cnt = rs.getInt(16);
+        c.c_since = rs.getTimestamp(17);
+        c.c_data = rs.getString(18);
         return c;
       }
     }
@@ -837,7 +865,8 @@ public class Payment extends TPCCProcedure {
         if (!rs.next()) {
           throw new RuntimeException("ROWID=" + rowId + " not found!");
         }
-        return rs.getString("C_DATA");
+        // Regatta payGetCustCdataByRowIdSQL: C_DATA=1.
+        return rs.getString(1);
       }
     }
   }
@@ -899,9 +928,16 @@ public class Payment extends TPCCProcedure {
               "C_ID=" + c_id + " C_D_ID=" + c_d_id + " C_W_ID=" + c_w_id + " not found!");
         }
 
-        Customer c = TPCCUtil.newCustomerFromResults(rs);
-        c.c_id = c_id;
-        c.c_last = rs.getString("C_LAST");
+        Customer c;
+        if (this.getDbType() == DatabaseType.REGATTA) {
+          // Regatta payGetCustSQL includes C_LAST at index 3; c_id comes from the request.
+          c = TPCCUtil.newCustomerFromPayCustResults(rs);
+          c.c_id = c_id;
+        } else {
+          c = TPCCUtil.newCustomerFromResults(rs);
+          c.c_id = c_id;
+          c.c_last = rs.getString("C_LAST");
+        }
         return c;
       }
     }
@@ -1002,8 +1038,7 @@ public class Payment extends TPCCProcedure {
         if (!rs.next()) {
           throw new RuntimeException("ROWID=" + medianRowId + " not found!");
         }
-        Customer c = TPCCUtil.newCustomerFromResults(rs);
-        c.c_id = rs.getInt("C_ID");
+        Customer c = TPCCUtil.newCustomerFromNameResults(rs);
         c.c_last = customerLastName;
         return new CustomerByNameSelection(c, medianRowId);
       }

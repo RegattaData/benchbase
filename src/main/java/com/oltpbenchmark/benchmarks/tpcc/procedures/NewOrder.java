@@ -445,10 +445,11 @@ public class NewOrder extends TPCCProcedure {
       try (ResultSet rs = stmt.executeQuery()) {
         while (rs.next()) {
           Stock s = new Stock();
-          s.s_quantity = rs.getInt("S_QUANTITY");
+          // stmtGetStockBatchSQL: S_W_I_KEY=1, S_QUANTITY=2, S_DATA=3, S_DIST_INFO=4.
+          s.s_quantity = rs.getInt(2);
           // CASE expression collapsed the needed district string into S_DIST_INFO.
-          s.s_dist_01 = rs.getString("S_DIST_INFO");
-          stockMap.put(rs.getLong("S_W_I_KEY"), s);
+          s.s_dist_01 = rs.getString(4);
+          stockMap.put(rs.getLong(1), s);
         }
       }
     }
@@ -473,11 +474,13 @@ public class NewOrder extends TPCCProcedure {
           throw new RuntimeException("S_I_ID=" + ol_i_id + " not found!");
         }
         Stock s = new Stock();
-        s.s_quantity = rs.getInt("S_QUANTITY");
         if (this.getDbType() == DatabaseType.REGATTA) {
+          // stmtGetStockSQL (Regatta): S_QUANTITY=1, S_DATA=2, S_DIST_INFO=3.
           // Only the single needed district string was fetched via the CASE expression.
-          s.s_dist_01 = rs.getString("S_DIST_INFO");
+          s.s_quantity = rs.getInt(1);
+          s.s_dist_01 = rs.getString(3);
         } else {
+          s.s_quantity = rs.getInt("S_QUANTITY");
           s.s_dist_01 = rs.getString("S_DIST_01");
           s.s_dist_02 = rs.getString("S_DIST_02");
           s.s_dist_03 = rs.getString("S_DIST_03");
@@ -509,7 +512,8 @@ public class NewOrder extends TPCCProcedure {
       Map<Integer, Float> priceMap = new HashMap<>();
       try (ResultSet rs = stmt.executeQuery()) {
         while (rs.next()) {
-          priceMap.put(rs.getInt("I_ID"), rs.getFloat("I_PRICE"));
+          // stmtGetItemsBatchSQL: I_ID=1, I_PRICE=2.
+          priceMap.put(rs.getInt(1), rs.getFloat(2));
         }
       }
       for (int i = 0; i < numItems; i++) {
@@ -620,6 +624,10 @@ public class NewOrder extends TPCCProcedure {
       try (ResultSet rs = stmtGetDist.executeQuery()) {
         if (!rs.next()) {
           throw new RuntimeException("D_ID=" + d_id + " D_W_ID=" + w_id + " not found!");
+        }
+        // stmtGetDistSQL: D_NEXT_O_ID=1.
+        if (this.getDbType() == DatabaseType.REGATTA) {
+          return rs.getInt(1);
         }
         return rs.getInt("D_NEXT_O_ID");
       }

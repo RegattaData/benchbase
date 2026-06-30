@@ -45,7 +45,6 @@ public class TPCCUtil {
    */
   public static Customer newCustomerFromResults(ResultSet rs) throws SQLException {
     Customer c = new Customer();
-    // TODO: Use column indices: probably faster?
     c.c_first = rs.getString("c_first");
     c.c_middle = rs.getString("c_middle");
     c.c_street_1 = rs.getString("c_street_1");
@@ -61,6 +60,79 @@ public class TPCCUtil {
     c.c_ytd_payment = rs.getFloat("c_ytd_payment");
     c.c_payment_cnt = rs.getInt("c_payment_cnt");
     c.c_since = rs.getTimestamp("c_since");
+    return c;
+  }
+
+  /**
+   * Index-based variant of {@link #newCustomerFromResults} for the Regatta "get customer by id"
+   * layout (NewOrder/Payment/OrderStatus payGetCustSQL in dialect-regatta.xml):
+   *
+   * <pre>C_FIRST=1, C_MIDDLE=2, C_LAST=3, C_STREET_1=4, C_STREET_2=5, C_CITY=6, C_STATE=7,
+   * C_ZIP=8, C_PHONE=9, C_CREDIT=10, C_CREDIT_LIM=11, C_DISCOUNT=12, C_BALANCE=13,
+   * C_YTD_PAYMENT=14, C_PAYMENT_CNT=15, C_SINCE=16</pre>
+   *
+   * Reading by ordinal position avoids the per-column label lookup. The caller sets {@code c_id}
+   * from the request parameters. NOTE: the indices are coupled to the column order of the above
+   * statement; keep them in sync if that SELECT list changes.
+   *
+   * @param rs an open ResultSet positioned to the desired row
+   * @return the newly created Customer object
+   * @throws SQLException for problems getting data from row
+   */
+  public static Customer newCustomerFromPayCustResults(ResultSet rs) throws SQLException {
+    Customer c = new Customer();
+    c.c_first = rs.getString(1);
+    c.c_middle = rs.getString(2);
+    c.c_last = rs.getString(3);
+    c.c_street_1 = rs.getString(4);
+    c.c_street_2 = rs.getString(5);
+    c.c_city = rs.getString(6);
+    c.c_state = rs.getString(7);
+    c.c_zip = rs.getString(8);
+    c.c_phone = rs.getString(9);
+    c.c_credit = rs.getString(10);
+    c.c_credit_lim = rs.getFloat(11);
+    c.c_discount = rs.getFloat(12);
+    c.c_balance = rs.getFloat(13);
+    c.c_ytd_payment = rs.getFloat(14);
+    c.c_payment_cnt = rs.getInt(15);
+    c.c_since = rs.getTimestamp(16);
+    return c;
+  }
+
+  /**
+   * Index-based variant of {@link #newCustomerFromResults} for the Regatta "get customer by name"
+   * layout (OrderStatus ordStatGetCustByRowIdSQL / Payment payGetCustFieldsByRowIdSQL):
+   *
+   * <pre>C_FIRST=1, C_MIDDLE=2, C_ID=3, C_STREET_1=4, C_STREET_2=5, C_CITY=6, C_STATE=7,
+   * C_ZIP=8, C_PHONE=9, C_CREDIT=10, C_CREDIT_LIM=11, C_DISCOUNT=12, C_BALANCE=13,
+   * C_YTD_PAYMENT=14, C_PAYMENT_CNT=15, C_SINCE=16</pre>
+   *
+   * The caller sets {@code c_last} from the request parameters. NOTE: the indices are coupled to
+   * the column order of the above statement; keep them in sync if that SELECT list changes.
+   *
+   * @param rs an open ResultSet positioned to the desired row
+   * @return the newly created Customer object
+   * @throws SQLException for problems getting data from row
+   */
+  public static Customer newCustomerFromNameResults(ResultSet rs) throws SQLException {
+    Customer c = new Customer();
+    c.c_first = rs.getString(1);
+    c.c_middle = rs.getString(2);
+    c.c_id = rs.getInt(3);
+    c.c_street_1 = rs.getString(4);
+    c.c_street_2 = rs.getString(5);
+    c.c_city = rs.getString(6);
+    c.c_state = rs.getString(7);
+    c.c_zip = rs.getString(8);
+    c.c_phone = rs.getString(9);
+    c.c_credit = rs.getString(10);
+    c.c_credit_lim = rs.getFloat(11);
+    c.c_discount = rs.getFloat(12);
+    c.c_balance = rs.getFloat(13);
+    c.c_ytd_payment = rs.getFloat(14);
+    c.c_payment_cnt = rs.getInt(15);
+    c.c_since = rs.getTimestamp(16);
     return c;
   }
 

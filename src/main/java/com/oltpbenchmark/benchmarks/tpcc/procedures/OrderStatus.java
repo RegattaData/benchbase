@@ -28,6 +28,7 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Timestamp;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
@@ -224,9 +225,16 @@ public class OrderStatus extends TPCCProcedure {
           throw new RuntimeException(msg);
         }
         Oorder o = new Oorder();
-        o.o_id = rs.getInt("O_ID");
-        o.o_carrier_id = rs.getInt("O_CARRIER_ID");
-        o.o_entry_d = rs.getTimestamp("O_ENTRY_D");
+        if (this.getDbType() == DatabaseType.REGATTA) {
+          // ordStatGetNewestOrdSQL: O_ID=1, O_CARRIER_ID=2, O_ENTRY_D=3.
+          o.o_id = rs.getInt(1);
+          o.o_carrier_id = rs.getInt(2);
+          o.o_entry_d = rs.getTimestamp(3);
+        } else {
+          o.o_id = rs.getInt("O_ID");
+          o.o_carrier_id = rs.getInt("O_CARRIER_ID");
+          o.o_entry_d = rs.getTimestamp("O_ENTRY_D");
+        }
         return o;
       }
     }
@@ -248,19 +256,40 @@ public class OrderStatus extends TPCCProcedure {
 
       try (ResultSet rs = ordStatGetOrderLines.executeQuery()) {
 
+        boolean isRegatta = this.getDbType() == DatabaseType.REGATTA;
         while (rs.next()) {
+          // ordStatGetOrderLinesSQL: OL_I_ID=1, OL_SUPPLY_W_ID=2, OL_QUANTITY=3,
+          // OL_AMOUNT=4, OL_DELIVERY_D=5.
+          long olSupplyWId;
+          long olIId;
+          long olQuantity;
+          double olAmount;
+          Timestamp olDeliveryD;
+          if (isRegatta) {
+            olIId = rs.getLong(1);
+            olSupplyWId = rs.getLong(2);
+            olQuantity = rs.getLong(3);
+            olAmount = rs.getDouble(4);
+            olDeliveryD = rs.getTimestamp(5);
+          } else {
+            olIId = rs.getLong("OL_I_ID");
+            olSupplyWId = rs.getLong("OL_SUPPLY_W_ID");
+            olQuantity = rs.getLong("OL_QUANTITY");
+            olAmount = rs.getDouble("OL_AMOUNT");
+            olDeliveryD = rs.getTimestamp("OL_DELIVERY_D");
+          }
           StringBuilder sb = new StringBuilder();
           sb.append("[");
-          sb.append(rs.getLong("OL_SUPPLY_W_ID"));
+          sb.append(olSupplyWId);
           sb.append(" - ");
-          sb.append(rs.getLong("OL_I_ID"));
+          sb.append(olIId);
           sb.append(" - ");
-          sb.append(rs.getLong("OL_QUANTITY"));
+          sb.append(olQuantity);
           sb.append(" - ");
-          sb.append(TPCCUtil.formattedDouble(rs.getDouble("OL_AMOUNT")));
+          sb.append(TPCCUtil.formattedDouble(olAmount));
           sb.append(" - ");
-          if (rs.getTimestamp("OL_DELIVERY_D") != null) {
-            sb.append(rs.getTimestamp("OL_DELIVERY_D"));
+          if (olDeliveryD != null) {
+            sb.append(olDeliveryD);
           } else {
             sb.append("99-99-9999");
           }
@@ -306,9 +335,16 @@ public class OrderStatus extends TPCCProcedure {
           throw new RuntimeException(msg);
         }
 
-        Customer c = TPCCUtil.newCustomerFromResults(rs);
-        c.c_id = c_id;
-        c.c_last = rs.getString("C_LAST");
+        Customer c;
+        if (this.getDbType() == DatabaseType.REGATTA) {
+          // Regatta payGetCustSQL includes C_LAST at index 3; c_id comes from the request.
+          c = TPCCUtil.newCustomerFromPayCustResults(rs);
+          c.c_id = c_id;
+        } else {
+          c = TPCCUtil.newCustomerFromResults(rs);
+          c.c_id = c_id;
+          c.c_last = rs.getString("C_LAST");
+        }
         return c;
       }
     }
@@ -361,8 +397,7 @@ public class OrderStatus extends TPCCProcedure {
           if (!rs.next()) {
             throw new RuntimeException("ROWID=" + medianRowId + " not found!");
           }
-          Customer c = TPCCUtil.newCustomerFromResults(rs);
-          c.c_id = rs.getInt("C_ID");
+          Customer c = TPCCUtil.newCustomerFromNameResults(rs);
           c.c_last = c_last;
           return c;
         }

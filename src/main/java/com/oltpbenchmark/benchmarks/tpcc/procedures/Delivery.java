@@ -230,7 +230,7 @@ public class Delivery extends TPCCProcedure {
             LOG.warn("District has no new orders [W_ID={}, D_ID={}]", w_id, dId);
             continue;
           }
-          int noOId = rs.getInt("NO_O_ID");
+          int noOId = rs.getInt(1);
           long oKey = TPCCUtil.concatOrderKey(w_id, dId, noOId);
           orderIDs[dId - 1] = noOId;
           result.add(new DistrictOrder(dId, noOId, oKey));
@@ -260,7 +260,8 @@ public class Delivery extends TPCCProcedure {
     try (Statement stmt = conn.createStatement();
         ResultSet rs = stmt.executeQuery(sql.toString())) {
       while (rs.next()) {
-        oKeyToCustId.put(rs.getLong("O_KEY"), rs.getInt("O_C_ID"));
+        // RETURNING O_KEY, O_C_ID.
+        oKeyToCustId.put(rs.getLong(1), rs.getInt(2));
       }
     }
     if (oKeyToCustId.size() != activeOrders.size()) {
@@ -293,7 +294,8 @@ public class Delivery extends TPCCProcedure {
     try (Statement stmt = conn.createStatement();
         ResultSet rs = stmt.executeQuery(sql.toString())) {
       while (rs.next()) {
-        oKeyToTotal.put(rs.getLong("OL_O_KEY"), rs.getFloat("OL_TOTAL"));
+        // SELECT OL_O_KEY, SUM(OL_AMOUNT) AS OL_TOTAL.
+        oKeyToTotal.put(rs.getLong(1), rs.getFloat(2));
       }
     }
     return oKeyToTotal;

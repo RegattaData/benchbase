@@ -107,6 +107,10 @@ public class StockLevel extends TPCCProcedure {
         if (!rs.next()) {
           throw new RuntimeException("D_W_ID=" + w_id + " D_ID=" + d_id + " not found!");
         }
+        // stockGetDistOrderIdSQL: D_NEXT_O_ID=1.
+        if (this.getDbType() == DatabaseType.REGATTA) {
+          return rs.getInt(1);
+        }
         return rs.getInt("D_NEXT_O_ID");
       }
     }
@@ -144,6 +148,10 @@ public class StockLevel extends TPCCProcedure {
           throw new RuntimeException(msg);
         }
 
+        // stockGetCountStockSQL: STOCK_COUNT=1.
+        if (this.getDbType() == DatabaseType.REGATTA) {
+          return rs.getInt(1);
+        }
         return rs.getInt("STOCK_COUNT");
       }
     }
