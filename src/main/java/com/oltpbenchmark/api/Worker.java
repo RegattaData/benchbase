@@ -696,6 +696,18 @@ public abstract class Worker<T extends BenchmarkModule> implements Runnable {
     }
 
     // ------------------
+    // Regatta: SQL state class "40" is "transaction rollback" (e.g. 40001
+    // serialization_failure, 40002 transaction integrity constraint violation).
+    // These are expected conflicts under concurrency that the engine asks the
+    // client to "try again", so they should be retried rather than reported as
+    // hard errors.
+    // ------------------
+    if (this.configuration.getDatabaseType() == DatabaseType.REGATTA
+        && sqlState.startsWith("40")) {
+      return true;
+    }
+
+    // ------------------
     // SqlServer: "SELECT TOP 10 * FROM sys.messages"
     // ------------------
     if (errorCode == 12222 && sqlState.equals("S0051")) {
